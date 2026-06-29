@@ -1,0 +1,69 @@
+{
+  "id": "t06-bugfix-sweep",
+  "title": "Fix a list of known bugs",
+  "goal": "Fix 6 enumerated bugs; do not regress neighbouring behaviour.",
+  "prompt": "Fix each bug in BRIEF.md with a regression test; keep the suite green.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "F01-bug-off-by-one",
+      "description": "Implement bug off by one",
+      "requires": [
+        "fix off-by-one",
+        "boundary"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-bug-null-deref",
+      "description": "Implement bug null deref",
+      "requires": [
+        "guard null",
+        "none check"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F03-bug-race",
+      "description": "Implement bug race",
+      "requires": [
+        "lock",
+        "thread-safe"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F04-bug-encoding",
+      "description": "Implement bug encoding",
+      "requires": [
+        "utf-8",
+        "decode"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F05-bug-timezone",
+      "description": "Implement bug timezone",
+      "requires": [
+        "utc",
+        "aware datetime"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F06-regression-tests",
+      "description": "Implement regression tests",
+      "requires": [
+        "def test_",
+        "all pass"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": true,
+  "reference_solution": "Six targeted fixes each with a regression test.",
+  "simulation": {
+    "residual_fail_prob": 0.03
+  }
+}

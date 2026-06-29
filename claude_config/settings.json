@@ -1,0 +1,56 @@
+{
+  "$comment": "Drop-in .claude/settings.json that wires the long-horizon module into Claude Code. Copy this file (and CLAUDE.md, and ../agents/evaluator.md) into a target project's .claude/ directory via scripts/install.sh. Every primitive is toggleable through LHX_* env vars; set LHX_ENABLED=false to run the A/B 'OFF' arm with the exact same config file.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python -m lhx.hooks.session_start" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "python -m lhx.hooks.pre_tool_use" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "python -m lhx.hooks.post_tool_use" }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          { "type": "command", "command": "python -m lhx.hooks.pre_compact" }
+        ]
+      },
+      {
+        "matcher": "manual",
+        "hooks": [
+          { "type": "command", "command": "python -m lhx.hooks.pre_compact" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python -m lhx.hooks.stop" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python -m lhx.hooks.subagent_stop" }
+        ]
+      }
+    ]
+  }
+}

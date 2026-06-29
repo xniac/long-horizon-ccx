@@ -1,0 +1,70 @@
+{
+  "id": "t04-cli-tool",
+  "title": "Multi-subcommand CLI",
+  "goal": "Build a CLI with init/add/list/done/report subcommands and tests.",
+  "prompt": "Implement each subcommand in BRIEF.md, verifying each end to end.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "F01-init",
+      "description": "Implement init",
+      "requires": [
+        "cmd init",
+        "creates store"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-add",
+      "description": "Implement add",
+      "requires": [
+        "cmd add",
+        "appends item"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F03-list",
+      "description": "Implement list",
+      "requires": [
+        "cmd list",
+        "prints items"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F04-done",
+      "description": "Implement done",
+      "requires": [
+        "cmd done",
+        "marks complete"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F05-report",
+      "description": "Implement report",
+      "requires": [
+        "cmd report",
+        "summary"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F06-tests",
+      "description": "Implement tests",
+      "requires": [
+        "def test_",
+        "argparse",
+        "assert"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 1,
+  "interruption": true,
+  "reference_solution": "argparse CLI with five subcommands + tests/test_cli.py.",
+  "simulation": {
+    "residual_fail_prob": 0.03
+  }
+}

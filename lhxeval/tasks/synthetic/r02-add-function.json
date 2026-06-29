@@ -1,0 +1,38 @@
+{
+  "id": "r02-add-function",
+  "title": "Pure function + test",
+  "goal": "Add a slugify() function and one unit test.",
+  "prompt": "Implement slugify() and a test per BRIEF.md.",
+  "difficulty": "regression",
+  "features": [
+    {
+      "id": "F01-slugify",
+      "description": "Implement slugify",
+      "requires": [
+        "def slugify",
+        "lowercase",
+        "hyphen"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-test",
+      "description": "Implement test",
+      "requires": [
+        "def test_slugify",
+        "assert"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": false,
+  "reference_solution": "slugify() lowercasing and hyphenating + one assert.",
+  "simulation": {
+    "base_doom_loop_prob": 0.0,
+    "drift_prob_per_feature": 0.0,
+    "compaction_amnesia_prob": 0.0,
+    "cold_resume_fail_prob": 0.0,
+    "residual_fail_prob": 0.0
+  }
+}

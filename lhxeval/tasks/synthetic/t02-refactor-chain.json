@@ -1,0 +1,63 @@
+{
+  "id": "t02-refactor-chain",
+  "title": "Sequential refactor chain",
+  "goal": "Refactor a monolith into modules without breaking the passing test suite.",
+  "prompt": "Perform the refactor steps in BRIEF.md in order; keep all tests green.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "F01-extract-db",
+      "description": "Implement extract db",
+      "requires": [
+        "module db",
+        "connection"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-extract-auth",
+      "description": "Implement extract auth",
+      "requires": [
+        "module auth",
+        "hash",
+        "verify"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F03-extract-handlers",
+      "description": "Implement extract handlers",
+      "requires": [
+        "module handlers",
+        "route"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F04-wire-imports",
+      "description": "Implement wire imports",
+      "requires": [
+        "from db",
+        "from auth",
+        "from handlers"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F05-keep-green",
+      "description": "Implement keep green",
+      "requires": [
+        "pytest",
+        "passed",
+        "no regressions"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 1,
+  "interruption": false,
+  "reference_solution": "Move code into db.py/auth.py/handlers.py, update imports, rerun tests.",
+  "simulation": {
+    "residual_fail_prob": 0.03
+  }
+}

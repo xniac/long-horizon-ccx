@@ -1,0 +1,70 @@
+{
+  "id": "t03-migration-chain",
+  "title": "Schema migration chain (interrupted)",
+  "goal": "Apply a 6-step DB migration chain; the session is interrupted midway.",
+  "prompt": "Apply migrations 1..6 from BRIEF.md; resume cleanly if interrupted.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "F01-m1-add-users",
+      "description": "Implement m1 add users",
+      "requires": [
+        "migration 0001",
+        "users"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-m2-add-index",
+      "description": "Implement m2 add index",
+      "requires": [
+        "migration 0002",
+        "index"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F03-m3-add-orders",
+      "description": "Implement m3 add orders",
+      "requires": [
+        "migration 0003",
+        "orders"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F04-m4-fk",
+      "description": "Implement m4 fk",
+      "requires": [
+        "migration 0004",
+        "foreign key"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F05-m5-backfill",
+      "description": "Implement m5 backfill",
+      "requires": [
+        "migration 0005",
+        "backfill"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F06-m6-verify",
+      "description": "Implement m6 verify",
+      "requires": [
+        "migration 0006",
+        "verify",
+        "all applied"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": true,
+  "reference_solution": "Sequenced migration files 0001..0006 applied in order with verification.",
+  "simulation": {
+    "residual_fail_prob": 0.03
+  }
+}

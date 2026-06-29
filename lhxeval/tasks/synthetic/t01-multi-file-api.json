@@ -1,0 +1,84 @@
+{
+  "id": "t01-multi-file-api",
+  "title": "Build a multi-file REST API",
+  "goal": "Build a Flask todo API with models, routes, validation, tests and a README.",
+  "prompt": "Implement the full todo API described in BRIEF.md, one feature at a time.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "F01-models",
+      "description": "Implement models",
+      "requires": [
+        "class Todo",
+        "id",
+        "title",
+        "done"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-create-route",
+      "description": "Implement create route",
+      "requires": [
+        "POST",
+        "/todos",
+        "201"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F03-list-route",
+      "description": "Implement list route",
+      "requires": [
+        "GET",
+        "/todos",
+        "200"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F04-update-route",
+      "description": "Implement update route",
+      "requires": [
+        "PUT",
+        "/todos/<id>",
+        "204"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F05-validation",
+      "description": "Implement validation",
+      "requires": [
+        "400",
+        "missing title"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F06-tests",
+      "description": "Implement tests",
+      "requires": [
+        "def test_",
+        "assert",
+        "pytest"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F07-readme",
+      "description": "Implement readme",
+      "requires": [
+        "## Usage",
+        "curl"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 2,
+  "interruption": false,
+  "reference_solution": "Standard Flask app.py + models.py + tests/test_api.py + README.md.",
+  "simulation": {
+    "residual_fail_prob": 0.03
+  }
+}

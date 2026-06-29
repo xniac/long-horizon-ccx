@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-longhorizon"
+version = "0.1.0"
+description = "A long-horizon extension module for Claude Code, plus a controlled A/B evaluation harness."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Eval Engineer take-home" }]
+dependencies = [
+    # Intentionally light. The core module and the eval harness run with no
+    # numpy/scipy/jinja2/pyyaml — the statistics and dashboard are pure-Python
+    # so a reviewer can `pip install -e .` and run the whole A/B offline.
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+# Only needed to run the eval against *real* Claude instead of the simulated
+# backend. Imported lazily so the package works without it.
+sdk = ["claude-agent-sdk>=0.1.0"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+lhx-eval = "lhxeval.cli:main"
+
+[tool.setuptools]
+packages = ["lhx", "lhx.hooks", "lhxeval", "lhxeval.tasks"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

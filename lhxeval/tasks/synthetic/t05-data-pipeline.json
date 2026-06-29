@@ -1,0 +1,60 @@
+{
+  "id": "t05-data-pipeline",
+  "title": "ETL pipeline with stages",
+  "goal": "Build extract/transform/validate/load stages with a smoke test.",
+  "prompt": "Implement each pipeline stage in BRIEF.md and a smoke test.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "F01-extract",
+      "description": "Implement extract",
+      "requires": [
+        "def extract",
+        "reads source"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-transform",
+      "description": "Implement transform",
+      "requires": [
+        "def transform",
+        "normalizes"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F03-validate",
+      "description": "Implement validate",
+      "requires": [
+        "def validate",
+        "rejects bad rows"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F04-load",
+      "description": "Implement load",
+      "requires": [
+        "def load",
+        "writes sink"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F05-smoke",
+      "description": "Implement smoke",
+      "requires": [
+        "def test_pipeline",
+        "end to end"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 2,
+  "interruption": false,
+  "reference_solution": "pipeline.py with four stage functions + tests/test_pipeline.py.",
+  "simulation": {
+    "residual_fail_prob": 0.03
+  }
+}

@@ -1,0 +1,32 @@
+# Runtime / agent state written by the long-horizon module
+.lh/
+PROGRESS.md
+MEMORY.md
+feature_list.json
+AGENT_STOP
+STEER.md
+*.jsonl
+*.jsonl.bak
+
+# Eval harness artifacts
+runs/
+*.results.json
+dashboard/*.html
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

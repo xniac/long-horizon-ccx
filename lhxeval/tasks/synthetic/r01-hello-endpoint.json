@@ -1,0 +1,30 @@
+{
+  "id": "r01-hello-endpoint",
+  "title": "Single endpoint",
+  "goal": "Add a /health endpoint returning 200 ok.",
+  "prompt": "Add the /health endpoint described in BRIEF.md.",
+  "difficulty": "regression",
+  "features": [
+    {
+      "id": "F01-health",
+      "description": "Implement health",
+      "requires": [
+        "GET",
+        "/health",
+        "200",
+        "ok"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": false,
+  "reference_solution": "One route returning ('ok', 200).",
+  "simulation": {
+    "base_doom_loop_prob": 0.0,
+    "drift_prob_per_feature": 0.0,
+    "compaction_amnesia_prob": 0.0,
+    "cold_resume_fail_prob": 0.0,
+    "residual_fail_prob": 0.0
+  }
+}

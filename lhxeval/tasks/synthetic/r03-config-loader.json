@@ -1,0 +1,38 @@
+{
+  "id": "r03-config-loader",
+  "title": "Config loader",
+  "goal": "Add a config loader reading env with defaults.",
+  "prompt": "Implement load_config() per BRIEF.md.",
+  "difficulty": "regression",
+  "features": [
+    {
+      "id": "F01-loader",
+      "description": "Implement loader",
+      "requires": [
+        "def load_config",
+        "os.environ",
+        "default"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-test",
+      "description": "Implement test",
+      "requires": [
+        "def test_config",
+        "assert"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": false,
+  "reference_solution": "load_config() reading env with fallback defaults + test.",
+  "simulation": {
+    "base_doom_loop_prob": 0.0,
+    "drift_prob_per_feature": 0.0,
+    "compaction_amnesia_prob": 0.0,
+    "cold_resume_fail_prob": 0.0,
+    "residual_fail_prob": 0.0
+  }
+}
