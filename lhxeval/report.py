@@ -1,9 +1,6 @@
-"""Aggregate an ABResult into results.json + a static HTML dashboard.
-
-No templating dependency — the dashboard is a single self-contained HTML string
-so it can be opened directly from disk. It shows the per-arm metric table, the
-paired deltas with confidence intervals, the McNemar verdict, and the
-long-horizon-specific metrics that are the point of the module.
+"""Aggregate an ABResult into results.json + a self-contained static HTML
+dashboard (per-arm table, paired deltas + CIs, McNemar, pass@k/pass^k curves).
+HTML lives in a sibling ``dashboard.html`` ``string.Template``. See DESIGN §9.
 """
 
 from __future__ import annotations

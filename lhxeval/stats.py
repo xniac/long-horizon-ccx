@@ -1,18 +1,9 @@
-"""Uncertainty + significance — pure Python (no scipy).
+"""Uncertainty + significance — pure Python (no scipy); small and exact, since
+eval suites are small (n=20–50, k=3–5) and normal approximations mislead. DESIGN §8.5.
 
-Three tools matched to the paired A/B design:
-
-* **Paired bootstrap CI** for the difference in mean of a per-(task,seed) paired
-  metric (e.g. ON success - OFF success). Resamples *pairs* to respect the
-  pairing, which cuts variance versus an unpaired comparison.
-* **McNemar exact test** on the paired pass/fail table — the right test for
-  "did toggling the module change per-task success?" because trials are paired.
-  Uses the exact binomial (two-sided) on the discordant pairs.
-* **Beta posterior** (Jeffreys prior, a=b=0.5) for a single success rate, giving
-  an honest credible interval when k and n are small — exactly the regime here.
-
-These are deliberately small and exact rather than asymptotic, since eval suites
-are small (20-50 tasks, k=3-5) and normal approximations mislead.
+* **Paired bootstrap CI** — resamples (task,seed) pairs to respect the pairing.
+* **McNemar exact** — two-sided binomial on the discordant pairs (paired binary test).
+* **Beta posterior** (Jeffreys) — honest credible interval for a single rate at small n.
 """
 
 from __future__ import annotations
@@ -80,9 +71,12 @@ class McNemarResult:
     n_discordant: int
 
     def __str__(self) -> str:
+        # Use scientific notation for tiny p so it doesn't round to a misleading
+        # "0.0000" — a 46-0 split gives p ~ 2.8e-14, not zero.
+        p = f"{self.p_value:.2e}" if self.p_value < 1e-4 else f"{self.p_value:.4f}"
         return (
             f"McNemar exact: helped={self.b}, hurt={self.c}, "
-            f"discordant={self.n_discordant}, p={self.p_value:.4f}"
+            f"discordant={self.n_discordant}, p={p}"
         )
 
 

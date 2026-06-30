@@ -1,10 +1,6 @@
-"""SubagentStop hook — capture the fresh-context evaluator's verdict.
-
-The evaluator subagent (agents/evaluator.md) reviews the diff/artifacts from a
-context that never saw the build and must begin its reply with ``PASS`` or
-``NEEDS_WORK``. This hook parses that verdict from the subagent transcript and
-records it in the ledger so the next builder session can seed its work from the
-findings on ``NEEDS_WORK``.
+"""SubagentStop hook (M2) — parse the fresh-context evaluator's
+``PASS``/``NEEDS_WORK`` verdict (agents/evaluator.md) from its transcript into the
+ledger, so a ``NEEDS_WORK`` seeds the next builder session.
 """
 
 from __future__ import annotations

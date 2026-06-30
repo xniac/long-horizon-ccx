@@ -1,16 +1,9 @@
-"""Checkpoint / resume.
+"""Checkpoint / resume (M7). See DESIGN §6(b).
 
-Two layers of durability:
-
-* **git checkpoint** — a ``git commit`` of tracked changes at the end of a
-  session (deliberately *not* ``git add -A``, to keep ephemeral artifacts out of
-  history). git gives free rollback to any working state.
-* **``.lh/checkpoint.json``** — a small typed checkpoint (feature progress,
-  tool-call count, last session id) used to re-hydrate quickly on resume even
-  outside a git repo.
-
-``resume_context()`` produces the text injected at SessionStart so a brand new
-session — which has *no memory of what came before* — can get its bearings.
+Two layers of durability: a git commit of *tracked* changes at session end
+(deliberately not ``git add -A``, to keep ephemeral artifacts out of history) + a
+typed ``.lh/checkpoint.json``. ``resume_context()`` builds the SessionStart
+injection that re-orients a fresh session.
 """
 
 from __future__ import annotations

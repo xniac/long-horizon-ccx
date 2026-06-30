@@ -1,3 +1,7 @@
+# Secrets — keep .env out of git, but track the template
+.env
+!.env.template
+
 # Runtime / agent state written by the long-horizon module
 .lh/
 PROGRESS.md

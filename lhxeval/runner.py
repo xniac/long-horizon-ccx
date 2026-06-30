@@ -1,13 +1,6 @@
-"""A/B driver — the controlled experiment.
-
-Independent variable: the long-horizon module (ON vs OFF). Everything else is
-held fixed — same model/backend, same task suite, same seeds, same agent
-harness. We use a **paired** design: for each (task, seed) we run both arms with
-that same seed, so the per-pair difference cancels task/seed variance. We run
-``k`` seeds per task.
-
-The runner is backend-agnostic: it works identically with the simulated backend
-(offline, deterministic) and the real Claude Agent SDK backend.
+"""A/B driver. Independent variable: the module (ON vs OFF); everything else
+fixed. Paired design — for each (task, seed) both arms share the seed, so the
+per-pair difference cancels task/seed variance. Backend-agnostic. See DESIGN §8.1.
 """
 
 from __future__ import annotations

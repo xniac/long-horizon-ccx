@@ -1,16 +1,8 @@
-"""Task schema.
+"""Task schema (JSON, zero parser dep), validated via pydantic. See DESIGN §8.2.
 
-A task is a self-contained, machine-checkable long-horizon job. Tasks are stored
-as JSON (zero parser dependency) and validated through these pydantic models.
-
-Design notes (following Anthropic's "Demystifying evals" guidance):
-* Each task carries a **reference solution descriptor** so we can prove the task
-  is solvable and graders are not vacuous (the 0%-pass sanity check).
-* Graders score the **outcome / produced artifact**, not the path taken.
-* ``difficulty`` lets us split a *capability* suite (low pass rate, a hill to
-  climb) from a *regression* suite (should run near 100%).
-* ``simulation`` parameterises the deterministic simulated backend so the same
-  task definition drives both offline (simulated) and real (SDK) runs.
+Key fields and why: ``reference_solution`` proves solvability (the 0%-pass sanity
+check); ``difficulty`` splits a capability vs regression suite; ``simulation``
+parameterises the simulated backend so one task definition drives both backends.
 """
 
 from __future__ import annotations

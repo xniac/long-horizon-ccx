@@ -9,7 +9,7 @@ description = "A long-horizon extension module for Claude Code, plus a controlle
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Eval Engineer take-home" }]
+authors = [{ name = "Xiaoyuan Ni" }]
 dependencies = [
     # Intentionally light. The core module and the eval harness run with no
     # numpy/scipy/jinja2/pyyaml — the statistics and dashboard are pure-Python

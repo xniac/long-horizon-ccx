@@ -1,13 +1,7 @@
-"""Stop hook — completion gate + end-of-session checkpoint.
-
-Counters the "premature victory" failure mode: a session that thinks it is done
-is blocked from stopping while (a) the feature contract is not fully verified and
-(b) the step budget is not exhausted and (c) the operator has not requested a
-stop. The gate keys on a *real* machine-checkable condition (the default-FAIL
-contract), which is what prevents it from becoming an infinite loop.
-
-On a legitimate stop it writes an end-of-session git checkpoint and updates the
-checkpoint file so the next session can resume.
+"""Stop hook (M2 + M7) — completion gate + end-of-session checkpoint. Blocks
+stopping while the feature contract isn't fully verified (and budget not hit,
+operator hasn't stopped); keying the gate on that *machine-checkable* condition is
+what keeps it from becoming an infinite loop. A legitimate stop then checkpoints.
 """
 
 from __future__ import annotations

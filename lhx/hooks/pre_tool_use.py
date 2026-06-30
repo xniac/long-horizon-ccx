@@ -1,14 +1,7 @@
-"""PreToolUse hook — operator controls + doom-loop guard + step-budget breaker.
-
-Order of precedence (highest first):
-1. **Kill switch** — if ``AGENT_STOP`` exists, block every tool call.
-2. **Steering** — if ``STEER.md`` exists, surface its contents once as operator
-   guidance and clear it.
-3. **Doom-loop / step-budget guard** — block identical-retry loops and runaway
-   sessions.
-
-This is the single most load-bearing hook for autonomous safety, so it stays
-small and the decision logic lives in ``lhx.loop_guard``.
+"""PreToolUse hook (M5 + operator controls) — the only place to deny a call
+before it runs. Precedence: kill-switch (``AGENT_STOP``) > steering (``STEER.md``,
+surfaced once) > doom-loop / step-budget guard. Decision logic lives in
+``lhx.loop_guard``.
 """
 
 from __future__ import annotations

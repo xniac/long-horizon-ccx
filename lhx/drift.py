@@ -1,17 +1,6 @@
-"""Goal-drift check.
-
-On a long run an agent can slowly optimise for something *adjacent* to the
-original goal (it "drifts"). We provide two complementary checks:
-
-* **Contract check (deterministic)** — does the final state satisfy the
-  machine-checkable feature contract? This is the authoritative signal and is
-  what the eval harness scores.
-* **Keyword/spec heuristic** — a cheap, model-free signal comparing the
-  immutable BRIEF against the produced artifacts for the presence of required
-  tokens. Useful as a fast in-loop nudge between full evaluator runs.
-
-An optional LLM-judge drift score is exposed as a hook point but kept out of the
-default path so the module has no hard model dependency.
+"""Goal-drift check (M6). The authoritative signal is the deterministic feature
+contract; the keyword heuristic below is only a cheap in-loop nudge (see the
+limitation note on ``keyword_drift``). See DESIGN §6(e).
 """
 
 from __future__ import annotations

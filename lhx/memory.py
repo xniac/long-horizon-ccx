@@ -1,17 +1,7 @@
-"""Constant-size external memory: an immutable BRIEF + a capped MEMORY scratchpad.
-
-Mirrors the Codex "constant-size memory" pattern referenced in the research:
-
-* ``BRIEF.md`` is written once and treated as immutable — it is the original,
-  un-drifted statement of the goal. The drift checker compares outcomes against
-  this, not against the (mutable) conversation.
-* ``MEMORY.md`` is a rolling scratchpad capped at ``memory_char_cap`` characters
-  so it can never grow without bound and re-bloat the context window. When the
-  cap is exceeded we keep the most recent content (the head is the oldest).
-
-Keeping memory bounded is the whole point: it lets a session re-hydrate the
-*essential* state after a compaction or restart without paying for an
-ever-growing note file.
+"""Constant-size external memory (Codex pattern, M3): an immutable ``BRIEF.md``
+(the un-drifted goal) + a ``MEMORY.md`` scratchpad capped at ``memory_char_cap``
+chars (keeping the most recent content) so it can't re-bloat the context window.
+See DESIGN §6.
 """
 
 from __future__ import annotations

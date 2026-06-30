@@ -97,6 +97,11 @@ def main(argv: list[str] | None = None) -> int:
     pv.add_argument("--tasks", default=str(DEFAULT_TASKS))
     pv.set_defaults(func=cmd_validate)
 
+    # Load .env so `--backend sdk` picks up ANTHROPIC_API_KEY / LHX_SDK_* knobs.
+    from .env import load_dotenv
+
+    load_dotenv()
+
     args = p.parse_args(argv)
     return args.func(args)
 

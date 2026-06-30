@@ -1,9 +1,7 @@
-"""Shared stdin/stdout helpers for hooks + the Claude Code hook JSON contract.
+"""Shared stdin/stdout helpers for the Claude Code hook JSON contract.
 
-The hook payload schema has drifted across Claude Code versions; we read fields
-defensively and fall back to the current working directory when ``cwd`` is
-absent. Output helpers cover the two control mechanisms used here: a decision
-object (``allow``/``block``) and additional-context injection.
+Fields are read defensively because the payload schema has drifted across Claude
+Code versions.
 """
 
 from __future__ import annotations
@@ -41,8 +39,7 @@ def emit(obj: dict) -> None:
 
 
 def allow() -> None:
-    """Explicit no-op: let Claude Code proceed normally."""
-    emit({})
+    emit({})  # {} = proceed normally
 
 
 def block(reason: str, hook_event: str = "PreToolUse") -> None:

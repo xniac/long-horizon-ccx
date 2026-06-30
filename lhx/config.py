@@ -68,12 +68,30 @@ class Config(BaseModel):
 
     @classmethod
     def from_env(cls) -> "Config":
-        """Build a Config from LHX_* environment variables (used by hooks)."""
-        # If LHX_CONFIG points at a JSON file, load it as the base.
+        """Build a Config from LHX_* environment variables (used by hooks).
+
+        ``LHX_CONFIG`` may be a path to a JSON file *or* an inline JSON string.
+        This must never raise — a hook that crashes on a bad env value silently
+        disables the whole module (a long, costly bug to find), so every step
+        here is guarded.
+        """
         base: dict = {}
-        cfg_path = os.environ.get("LHX_CONFIG")
-        if cfg_path and Path(cfg_path).is_file():
-            base = json.loads(Path(cfg_path).read_text())
+        raw = os.environ.get("LHX_CONFIG")
+        if raw:
+            text = None
+            try:
+                p = Path(raw)
+                if len(raw) < 4096 and p.is_file():
+                    text = p.read_text(encoding="utf-8")
+            except OSError:
+                text = None  # e.g. "File name too long" when raw is inline JSON
+            if text is None and raw.lstrip().startswith("{"):
+                text = raw  # inline JSON
+            if text:
+                try:
+                    base = json.loads(text)
+                except (ValueError, TypeError):
+                    base = {}
 
         cfg = cls(**base)
         cfg.enabled = _env_bool("LHX_ENABLED", cfg.enabled)

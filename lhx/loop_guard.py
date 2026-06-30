@@ -1,18 +1,7 @@
-"""Doom-loop detector + step-budget circuit breaker.
+"""Doom-loop detector + step-budget circuit breaker (M5). See DESIGN §6(c).
 
-Two failure modes for autonomous long-horizon runs:
-
-1. **Doom loops** — the agent repeats the *same* tool call with the *same*
-   arguments (search/read/edit-retry loops). We hash ``(tool_name, args)`` and
-   compare the last ``window`` tool calls; if they are all identical we block
-   the call and tell the model to try a different approach (the Kilocode
-   pattern). The error is specific ("do NOT retry with identical arguments")
-   rather than a soft failure.
-
-2. **Runaway budget** — total tool calls exceed ``step_budget``. We hard-stop.
-
-Both are pure functions over the event trail, so they are trivially unit-tested
-without invoking a model.
+Pure functions over the event trail (hence trivially unit-tested): block when the
+last ``window`` tool signatures are identical, or hard-stop past ``step_budget``.
 """
 
 from __future__ import annotations

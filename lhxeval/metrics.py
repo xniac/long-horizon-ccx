@@ -1,17 +1,9 @@
-"""Long-horizon evaluation metrics — pure Python, no numpy.
+"""Long-horizon metrics — pure Python (auditable, no numpy). See DESIGN §8.4.
 
-We deliberately implement the estimators directly so the math is auditable:
+* **pass@k** = P(≥1 of k succeeds) = ``1 − C(n−c,k)/C(n,k)`` (Chen et al.); rises with k.
+* **pass^k** = P(all k succeed) = ``C(c,k)/C(n,k)``; falls with k — the reliability metric.
 
-* **pass@k** — probability that at least one of k trials succeeds. Uses the
-  unbiased combinatorial estimator from Chen et al. (HumanEval):
-  ``pass@k = 1 - C(n-c, k) / C(n, k)`` over n trials with c successes. Rises with
-  k; use it when one success is enough.
-* **pass^k** — probability that *all* k trials succeed. The natural unbiased
-  finite-sample estimator is ``C(c, k) / C(n, k)``. Falls with k; this is the
-  reliability/consistency metric (and the one a long-horizon module should move).
-* Trajectory aggregates — mean steps/turns, tokens, cost — over trials.
-
-All estimators degrade gracefully when k > n (return None / clamp).
+Plus trajectory aggregates (steps/tokens/cost). Estimators clamp when k > n.
 """
 
 from __future__ import annotations

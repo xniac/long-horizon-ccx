@@ -28,9 +28,11 @@ Simulated backend, 9 tasks × k=10 × 2 arms = 180 trials (`lhx-eval run -k 10`)
 | doom-loops / trial | **0.12** | 0.53 | −0.41 |
 
 Paired success delta **+0.511 [+0.400, +0.611]** (95% bootstrap CI); McNemar
-exact **p < 0.0001**. These are from a *simulated* agent with known ground-truth
-effects, used to **validate the eval harness itself** (see DESIGN §8.8); the same
-harness runs unchanged against real Claude via the Agent-SDK backend.
+exact **p ≈ 2.8e-14** (helped 46, hurt 0). ⚠️ This is a **harness-validation**
+run, not a real-model capability claim: the numbers come from a *simulated* agent
+with known ground-truth effects, used to prove the harness **detects an effect it
+knows exists** (see DESIGN §8.8). The same harness runs unchanged against real
+Claude via the Agent-SDK / CLI backend.
 
 ## Quickstart
 
@@ -48,6 +50,34 @@ scripts/run_eval.sh 10           # validate + run + point you at the dashboard
 
 No API key, numpy, scipy, or jinja2 required — the stats and dashboard are
 pure-Python so the whole A/B runs offline and deterministically.
+
+## Run against real Claude (Agent SDK / CLI)
+
+The same harness runs against real Claude — only the backend changes. Provide a
+key via `.env`:
+
+```bash
+cp .env.template .env          # then put your ANTHROPIC_API_KEY in .env
+pip install -e ".[sdk]"        # only if you want the Python Agent SDK transport
+
+# one tiny task, end-to-end, module ON — the simplest "does my key work?" check:
+python scripts/smoke_sdk.py                 # default task r01-hello-endpoint
+python scripts/smoke_sdk.py t01-multi-file-api
+
+# the full paired A/B against real Claude instead of the simulated backend:
+lhx-eval run -k 3 --backend sdk
+```
+
+`.env` knobs (see [.env.template](.env.template)): `LHX_SDK_TRANSPORT`
+(`auto`|`sdk`|`cli`), `LHX_SDK_MODEL`, `LHX_SDK_MAX_TURNS`, `LHX_SDK_TIMEOUT`.
+Transport `auto` uses the `claude` CLI if it's on PATH, else the Python
+`claude_agent_sdk`. The backend installs the module's hooks into an isolated
+sandbox and toggles arms via `LHX_ENABLED` — so ON vs OFF holds everything else
+fixed, exactly like the offline run.
+
+> Note: a live run is **billed and non-deterministic**, so it's a manual check,
+> not part of `pytest`. The integration *seam* is covered offline by a mocked
+> smoke test ([tests/test_backend_sdk.py](tests/test_backend_sdk.py)).
 
 ## Install the module into a real project
 

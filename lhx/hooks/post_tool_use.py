@@ -1,9 +1,6 @@
-"""PostToolUse hook — record the tool call and (periodically) nudge reflection.
-
-Every tool call is appended to the structured event trail (``.lh/events.jsonl``)
-with its loop-detection signature. This trail powers the loop guard, the
-reflection cadence and the eval metrics (steps, doom-loop incidence). On
-reflection boundaries we inject the forced-reflection prompt.
+"""PostToolUse hook (M3/M6) — append the tool call to ``.lh/events.jsonl`` (the
+trail that powers the loop guard, reflection cadence and eval metrics), update the
+rolling MEMORY, and inject the reflection prompt on cadence boundaries.
 """
 
 from __future__ import annotations

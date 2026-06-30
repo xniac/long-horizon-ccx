@@ -1,11 +1,6 @@
-"""Isolated per-trial workspace.
-
-Each trial must start from a clean environment with no leftover files, cached
-data or git history from a prior trial — otherwise trials are not independent and
-the results are corrupt (Anthropic observed agents gaining unfair advantage by
-reading prior-trial git history). This module creates a fresh temp dir per trial,
-seeds the task's immutable BRIEF + default-FAIL feature_list, optionally inits a
-git repo, and guarantees teardown.
+"""Isolated per-trial workspace (DESIGN §8.6). A fresh temp dir per trial, seeded
+with the immutable BRIEF + default-FAIL contract and torn down after — so trials
+stay independent (no leftover files or prior-trial git history to read).
 """
 
 from __future__ import annotations

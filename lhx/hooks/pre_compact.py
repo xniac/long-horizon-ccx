@@ -1,10 +1,6 @@
-"""PreCompact hook — back up the transcript and flush critical state to disk.
-
-Compaction summarises a near-full context window into a fresh one; details can
-be lost. Before that happens we (a) back up the raw transcript so nothing is
-irrecoverable, and (b) append a marker to PROGRESS.md so the post-compaction
-session knows a boundary was crossed. The durable state (feature_list.json,
-PROGRESS.md, MEMORY.md) is already on disk, so the goal survives the boundary.
+"""PreCompact hook (M3) — back up the transcript and mark the boundary in
+PROGRESS.md before summarisation may drop detail. Durable state is already on
+disk, so the goal itself survives the boundary regardless.
 """
 
 from __future__ import annotations

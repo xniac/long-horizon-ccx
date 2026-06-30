@@ -1,14 +1,8 @@
-"""Graders — score the produced outcome, not the path taken.
-
-The primary grader is deterministic and outcome-based: for each feature in the
-task spec, check that the produced artifact contains all of the feature's
-``requires`` tokens. This mirrors fail-to-pass / pass-to-pass binary tests and
-yields **partial credit** (weighted fraction of features satisfied). Success is
-defined as *all* features satisfied.
-
-A model-based rubric grader is provided as a calibration hook but is off the
-default path (no hard model dependency). Per the methodology, deterministic
-graders come first and pass^k is only trusted once graders are deterministic.
+"""Graders — score the outcome, not the path (DESIGN §8.3). Deterministic and
+outcome-based: each feature passes iff the produced artifact contains all its
+``requires`` tokens (F2P/P2P-style); success = all features pass, with weighted
+partial credit. Deterministic-first, because pass^k is only trustworthy once
+graders are.
 """
 
 from __future__ import annotations

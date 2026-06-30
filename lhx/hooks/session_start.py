@@ -1,9 +1,6 @@
-"""SessionStart hook — inject resume context so a fresh session gets its bearings.
-
-SessionStart fires on startup *and* on resume (``source="resume"``), and its
-output is injected into the model's context. That makes it the correct place for
-time-sensitive state: it always reflects the latest on-disk truth (unlike
-PostToolUse additionalContext, which is replayed stale on resume).
+"""SessionStart hook (M4) — inject resume context so a fresh session gets its
+bearings. Chosen because it fires on startup *and* on resume (``source="resume"``)
+and its output is injected into context — the right place for time-sensitive state.
 """
 
 from __future__ import annotations

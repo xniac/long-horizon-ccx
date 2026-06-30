@@ -1,19 +1,9 @@
-"""External, on-disk state: the progress ledger and the default-FAIL feature list.
+"""On-disk state: the progress ledger (``PROGRESS.md``) + the default-FAIL
+feature contract (``feature_list.json``). See DESIGN §6.
 
-This is the "structured note-taking / agentic memory" primitive. State lives on
-disk (not in the context window) so it survives compaction, session restarts and
-process kills. Two artifacts:
-
-* ``PROGRESS.md`` — a human-readable, append-mostly narrative log ("engineers
-  working in shifts" handoff notes).
-* ``feature_list.json`` — a machine-checkable task contract. Every feature
-  starts ``"passes": false`` (the *default-FAIL* contract from Anthropic's
-  ``cwc-long-running-agents``): a feature only flips to ``true`` when the agent
-  presents verified evidence, never by assertion. JSON is used (not Markdown)
-  because the model is far less likely to inappropriately rewrite it.
-
-Writes are atomic (write-temp-then-rename) so a process kill mid-write can never
-corrupt the ledger — important for the resume-after-interruption guarantee.
+Two non-obvious choices: the contract is JSON, not Markdown, because the model is
+less likely to rewrite it; contract writes are atomic (temp-then-rename) so a
+mid-write kill can't corrupt it.
 """
 
 from __future__ import annotations

@@ -1,23 +1,10 @@
-"""Agent backends — what actually "runs" a task under an arm's configuration.
+"""Agent backends behind one interface; a backend returns a ``RunOutcome`` that
+graders score by outcome (not path). See DESIGN §5.3-7 / §8.8.
 
-Two backends behind one interface:
-
-* ``SimulatedBackend`` (default) — a deterministic, seedable model of a
-  long-horizon agent run with **known ground-truth effects**. Crucially, the
-  mitigations it applies are gated on the *real* ``lhx.Config`` toggles, so
-  flipping ``config.enabled`` (or one primitive) changes behaviour exactly as the
-  deployed module would. This lets the entire A/B run offline with no API key,
-  and — more importantly for an Eval Engineer — lets us *validate the eval
-  harness itself* against a ground truth before trusting it on real models.
-
-* ``ClaudeAgentSDKBackend`` — runs real Claude through the Claude Agent SDK in an
-  isolated sandbox with the module's hooks installed (or not, for the OFF arm),
-  and reconstructs the trajectory from the message stream / event trail. Imported
-  lazily so the package works without the SDK installed.
-
-A backend returns a ``RunOutcome`` describing the produced artifact and the
-trajectory; **graders** then decide success from the artifact (outcome, not
-path).
+* ``SimulatedBackend`` (default, offline) — deterministic model of a long-horizon
+  run whose mitigations are gated on the *real* ``lhx.Config`` toggles, so it
+  validates the eval harness against a known ground truth before trusting it.
+* ``ClaudeAgentSDKBackend`` — real Claude via the Python Agent SDK or `claude -p`.
 """
 
 from __future__ import annotations
@@ -196,19 +183,20 @@ class SimulatedBackend(AgentBackend):
 
 
 class ClaudeAgentSDKBackend(AgentBackend):
-    """Runs real Claude in an isolated sandbox via the headless `claude -p` CLI.
+    """Runs real Claude in an isolated sandbox, via either the Python Agent SDK
+    (``claude_agent_sdk.query()``) or the headless ``claude -p`` CLI.
 
-    This is the *real* integration seam. The module is wired into the sandbox by
-    installing the drop-in ``.claude/`` config; the only difference between arms
-    is ``LHX_ENABLED`` (same config file, module inert when off), holding the
-    agent harness identical. The trajectory is reconstructed from the on-disk
-    artifacts the module writes (``.lh/events.jsonl`` + ``feature_list.json``) —
-    i.e. we grade the **outcome and the recorded events**, not the CLI's stdout.
+    The module is wired into the sandbox by installing the drop-in ``.claude/``
+    config; the only A/B difference is ``LHX_ENABLED`` (same config, inert when
+    off), holding the agent harness identical. The trajectory is reconstructed
+    from the on-disk artifacts the module writes (``.lh/events.jsonl`` +
+    ``feature_list.json``) — so the *outcome* grading is transport-agnostic; only
+    cost/token capture differs (the SDK path reads it from the ResultMessage).
 
-    Requires the ``claude`` CLI on PATH and ANTHROPIC_API_KEY. It is exercised by
-    a mocked smoke test (tests/test_backend_sdk.py); a live run needs credentials.
-    The SDK-native equivalent (in-process ``query()`` with hook callbacks and
-    ``max_budget_usd``) is a drop-in replacement for the subprocess call below.
+    Transport is chosen by ``LHX_SDK_TRANSPORT`` (``auto``|``sdk``|``cli``); auto
+    prefers the CLI if present, else the SDK. Both need ANTHROPIC_API_KEY. The CLI
+    path is covered by a mocked smoke test; the SDK path is written to the
+    documented API and validated with a live key (see scripts/smoke_sdk.py).
     """
 
     name = "claude-sdk"
@@ -219,58 +207,157 @@ class ClaudeAgentSDKBackend(AgentBackend):
         max_turns: int = 80,
         timeout_seconds: int = 900,
         max_budget_usd: float = 1.0,
+        transport: str = "auto",
+        permission_mode: str = "bypassPermissions",
+        keep_sandbox: bool = False,
     ):
         self.model = model
         self.max_turns = max_turns
         self.timeout_seconds = timeout_seconds
         self.max_budget_usd = max_budget_usd
+        self.transport = transport
+        # Headless tool use needs a non-interactive permission mode, or the CLI
+        # blocks on a permission/trust prompt and looks "stuck". Sandboxes are
+        # disposable, so bypassPermissions is appropriate here.
+        self.permission_mode = permission_mode
+        self.keep_sandbox = keep_sandbox
+        # Diagnostics from the most recent run (for smoke/debug).
+        self.last_cli: dict | None = None
+        self.last_workspace: str | None = None
+
+    def _resolve_transport(self) -> str:
+        import importlib.util
+        import os
+        import shutil as _shutil
+
+        t = os.environ.get("LHX_SDK_TRANSPORT", self.transport or "auto").lower()
+        if t in ("sdk", "cli"):
+            return t
+        if _shutil.which("claude") is not None:
+            return "cli"
+        if importlib.util.find_spec("claude_agent_sdk") is not None:
+            return "sdk"
+        raise RuntimeError(
+            "No transport available: install the `claude` CLI or "
+            "`pip install claude-agent-sdk`, and set ANTHROPIC_API_KEY. "
+            "Use --backend simulated for offline runs."
+        )
 
     def run(self, task: Task, config: Config, seed: int, directives: Directives) -> RunOutcome:
         import os
-        import shutil as _shutil
-        import subprocess
 
         from lhx.state import FeatureList
 
         from .sandbox import trial_sandbox
 
-        if _shutil.which("claude") is None:
-            raise RuntimeError(
-                "ClaudeAgentSDKBackend needs the `claude` CLI on PATH and "
-                "ANTHROPIC_API_KEY. Use --backend simulated for offline runs."
-            )
-
-        # Clean, isolated workspace with the module's hooks installed.
-        with trial_sandbox(task, init_git=True, install_module=True) as ws:
+        transport = self._resolve_transport()
+        with trial_sandbox(
+            task, init_git=True, install_module=True, keep=self.keep_sandbox
+        ) as ws:
+            self.last_workspace = str(ws)
             env = os.environ.copy()
-            # The only A/B difference: master switch + per-trial config via env.
             env["LHX_ENABLED"] = "true" if config.enabled else "false"
-            env["LHX_CONFIG"] = config.model_dump_json()  # ignored if unset path
+            # LHX_CONFIG is a *file path* (carries per-primitive ablation), not a
+            # JSON blob — a blob overflows NAME_MAX and crashes the hooks.
+            cfg_file = ws / ".lh" / "config.json"
+            cfg_file.parent.mkdir(parents=True, exist_ok=True)
+            cfg_file.write_text(config.model_dump_json(), encoding="utf-8")
+            env["LHX_CONFIG"] = str(cfg_file)
 
-            cmd = [
-                "claude", "-p",
-                "--model", self.model,
-                "--max-turns", str(self.max_turns),
-            ]
-            try:
-                subprocess.run(
-                    cmd,
-                    input=task.prompt,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout_seconds,
-                    cwd=str(ws),
-                    env=env,
-                    check=False,
+            cost = (
+                self._run_cli(ws, env, task.prompt)
+                if transport == "cli"
+                else self._run_sdk(ws, env, task.prompt)
+            )
+            outcome = self._reconstruct_outcome(ws, FeatureList)
+            outcome.tokens = cost.get("tokens", 0)
+            outcome.cost_usd = cost.get("usd", 0.0)
+            return outcome
+
+    def _run_cli(self, ws, env, prompt: str) -> dict:
+        import shutil as _shutil
+        import subprocess
+
+        if _shutil.which("claude") is None:
+            raise RuntimeError("transport=cli but `claude` CLI is not on PATH.")
+        import json
+
+        cmd = ["claude", "-p", "--model", self.model, "--max-turns", str(self.max_turns)]
+        # CRITICAL: as of Claude Code 2.x, project settings (our hooks) are NOT
+        # loaded unless opted in — without this the module is inert and the A/B
+        # measures nothing. (See SDK path: setting_sources=["project"].)
+        cmd += ["--setting-sources", "user,project,local"]
+        cmd += ["--output-format", "json"]  # machine-readable result incl. cost/usage
+        if self.permission_mode and self.permission_mode != "default":
+            cmd += ["--permission-mode", self.permission_mode]  # don't hang on prompts
+        try:
+            proc = subprocess.run(
+                cmd, input=prompt, capture_output=True, text=True,
+                timeout=self.timeout_seconds, cwd=str(ws), env=env, check=False,
+            )
+            self.last_cli = {
+                "cmd": " ".join(cmd),
+                "returncode": proc.returncode,
+                "stdout": proc.stdout or "",
+                "stderr": proc.stderr or "",
+            }
+        except subprocess.TimeoutExpired:
+            self.last_cli = {"cmd": " ".join(cmd), "returncode": "TIMEOUT",
+                             "stdout": "", "stderr": "timed out"}
+            return {}
+
+        # Parse cost/usage from the JSON result envelope.
+        cost: dict = {}
+        try:
+            data = json.loads(self.last_cli["stdout"])
+            if isinstance(data, dict):
+                cost["usd"] = data.get("total_cost_usd") or 0.0
+                usage = data.get("usage") or {}
+                cost["tokens"] = (usage.get("input_tokens", 0) or 0) + (
+                    usage.get("output_tokens", 0) or 0
                 )
-            except subprocess.TimeoutExpired:
-                pass  # treat as an (incomplete) run; outcome read from disk below
+                self.last_cli["result_text"] = data.get("result", "")
+        except (ValueError, TypeError):
+            pass  # non-JSON (e.g. error/timeout); cost stays empty
+        return cost
 
-            return self._reconstruct_outcome(ws, FeatureList)
+    def _run_sdk(self, ws, env, prompt: str) -> dict:
+        """Drive the in-process Agent SDK. Captures cost/usage from ResultMessage."""
+        import os
+
+        import anyio
+        from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore
+
+        for k, v in env.items():  # ensure the subprocessless SDK sees LHX_*/key
+            os.environ[k] = v
+
+        cost = {"usd": 0.0, "tokens": 0}
+
+        async def _go():
+            # setting_sources=["project"] loads the sandbox .claude/ (hooks +
+            # CLAUDE.md); if your SDK version lacks a kwarg, drop to the minimal form.
+            try:
+                options = ClaudeAgentOptions(
+                    cwd=str(ws), permission_mode="bypassPermissions",
+                    max_turns=self.max_turns, setting_sources=["project"],
+                )
+            except TypeError:
+                options = ClaudeAgentOptions(cwd=str(ws), permission_mode="bypassPermissions")
+            async for msg in query(prompt=prompt, options=options):
+                tc = getattr(msg, "total_cost_usd", None)
+                if tc is not None:
+                    cost["usd"] = tc
+                usage = getattr(msg, "usage", None)
+                if isinstance(usage, dict):
+                    cost["tokens"] = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+
+        anyio.run(_go)
+        return cost
 
     @staticmethod
     def _reconstruct_outcome(ws, feature_list_cls) -> RunOutcome:
-        """Rebuild a RunOutcome from the artifacts the module left on disk."""
+        """Rebuild a RunOutcome from the artifacts the module left on disk —
+        identical for both transports, since state lives on disk."""
         import json
         from pathlib import Path
 
@@ -291,13 +378,9 @@ class ClaudeAgentSDKBackend(AgentBackend):
         guard_blocks = [e for e in events if e.get("type") == "guard_block"]
 
         return RunOutcome(
-            # For real runs the grader inspects the workspace; here we surface the
-            # evidence the module verified per feature as the artifact.
             artifact={f.id: (f.evidence or f.id) for f in done},
             features_completed=[f.id for f in done],
             steps=len(tool_events),
-            tokens=0,  # TODO: parse from the session transcript / ResultMessage
-            cost_usd=0.0,
             doom_loops=sum(1 for e in guard_blocks if e.get("kind") == "doom_loop"),
             forced_compaction=any(e.get("type") == "compaction" for e in events),
             events=events,
@@ -307,6 +390,6 @@ class ClaudeAgentSDKBackend(AgentBackend):
 def get_backend(name: str, **kwargs) -> AgentBackend:
     if name in ("sim", "simulated"):
         return SimulatedBackend()
-    if name in ("sdk", "claude", "claude-sdk"):
+    if name in ("sdk", "claude", "claude-sdk", "cli"):
         return ClaudeAgentSDKBackend(**kwargs)
     raise ValueError(f"unknown backend: {name}")
