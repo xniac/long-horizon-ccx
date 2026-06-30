@@ -1,4 +1,4 @@
-"""Task schema (JSON, zero parser dep), validated via pydantic. See DESIGN §8.2.
+"""Task schema (JSON, zero parser dep), validated via pydantic.
 
 Key fields and why: ``reference_solution`` proves solvability (the 0%-pass sanity
 check); ``difficulty`` splits a capability vs regression suite; ``simulation``
@@ -50,6 +50,17 @@ class SimulationParams(BaseModel):
     residual_fail_prob: float = 0.0
 
 
+class VerifyCheck(BaseModel):
+    """An executable, outcome-based grader (F2P/P2P style). The ``cmd`` is run in
+    the produced workspace after a real run; exit code 0 == passed. This grades
+    what was *built*, not what the agent *claims* — the only honest signal for a
+    real-model A/B."""
+
+    id: str
+    cmd: str
+    weight: float = 1.0
+
+
 class Task(BaseModel):
     id: str
     title: str
@@ -63,6 +74,10 @@ class Task(BaseModel):
     interruption: bool = False
     reference_solution: str = ""         # proves solvability; used by sanity check
     simulation: SimulationParams = Field(default_factory=SimulationParams)
+    # Executable verification for REAL runs (the SDK/CLI backend). When present
+    # and run against a real workspace, these — not the agent's self-report —
+    # decide success. The simulated backend ignores them (it uses ``features``).
+    verify: list[VerifyCheck] = Field(default_factory=list)
 
     @property
     def n_features(self) -> int:

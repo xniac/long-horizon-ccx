@@ -1,7 +1,6 @@
 """Constant-size external memory (Codex pattern, M3): an immutable ``BRIEF.md``
 (the un-drifted goal) + a ``MEMORY.md`` scratchpad capped at ``memory_char_cap``
 chars (keeping the most recent content) so it can't re-bloat the context window.
-See DESIGN §6.
 """
 
 from __future__ import annotations

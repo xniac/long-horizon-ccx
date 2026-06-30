@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 
 from ..loop_guard import check, tool_signature
-from ._io import block, build_runtime, inject_context, read_event
+from ._io import allow, block, build_runtime, inject_context, read_event
 
 
 def main() -> int:
@@ -17,8 +17,6 @@ def main() -> int:
     rt = build_runtime(event)
     if not rt.config.enabled:
         # Module off: never interfere (this is the A/B "OFF" arm).
-        from ._io import allow
-
         allow()
         return 0
 
@@ -57,8 +55,6 @@ def main() -> int:
             rt.ledger.record_event({"type": "guard_block", "kind": decision.kind})
             block(decision.reason or "blocked", "PreToolUse")
             return 0
-
-    from ._io import allow
 
     allow()
     return 0

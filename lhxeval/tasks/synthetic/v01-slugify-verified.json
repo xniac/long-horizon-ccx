@@ -1,0 +1,41 @@
+{
+  "id": "v01-slugify-verified",
+  "title": "Slugify (executable-verified)",
+  "goal": "Implement a Python slugify() verified by running it.",
+  "prompt": "Create a Python module `slugify.py` at the project root exposing a function `slugify(s: str) -> str` that lowercases the input and replaces every run of non-alphanumeric characters with a single hyphen, stripping leading/trailing hyphens. Examples: slugify('Hello, World!') == 'hello-world'; slugify('  A__B  ') == 'a-b'.",
+  "difficulty": "regression",
+  "features": [
+    {
+      "id": "F01-slugify",
+      "description": "Implement slugify",
+      "requires": [
+        "def slugify",
+        "lowercase",
+        "hyphen"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": false,
+  "reference_solution": "slugify.py implementing the spec.",
+  "verify": [
+    {
+      "id": "hello-world",
+      "cmd": "python3 -c \"from slugify import slugify; assert slugify('Hello, World!')=='hello-world'\"",
+      "weight": 1.0
+    },
+    {
+      "id": "collapse-and-trim",
+      "cmd": "python3 -c \"from slugify import slugify; assert slugify('  A__B  ')=='a-b'\"",
+      "weight": 1.0
+    }
+  ],
+  "simulation": {
+    "base_doom_loop_prob": 0.0,
+    "drift_prob_per_feature": 0.0,
+    "compaction_amnesia_prob": 0.0,
+    "cold_resume_fail_prob": 0.0,
+    "residual_fail_prob": 0.0
+  }
+}

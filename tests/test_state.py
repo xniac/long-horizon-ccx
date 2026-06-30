@@ -37,10 +37,10 @@ def test_atomic_write_replaces_cleanly(tmp_path):
 
 def test_progress_ledger_events_and_tail(tmp_path):
     ledger = ProgressLedger(tmp_path / "PROGRESS.md", tmp_path / "events.jsonl")
-    ledger.init("build the thing")
-    ledger.append("did step one")
+    ledger.append("did step one")  # append-only; self-creates the header
     ledger.record_event({"type": "tool_use", "tool": "Read", "sig": "abc"})
     ledger.record_event({"type": "compaction"})
-    assert "build the thing" in (tmp_path / "PROGRESS.md").read_text()
+    progress = (tmp_path / "PROGRESS.md").read_text()
+    assert "did step one" in progress and "Session log" in progress
     assert len(ledger.read_events()) == 2
     assert len(ledger.tool_events()) == 1

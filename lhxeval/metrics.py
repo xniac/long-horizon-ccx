@@ -1,4 +1,4 @@
-"""Long-horizon metrics — pure Python (auditable, no numpy). See DESIGN §8.4.
+"""Long-horizon metrics — pure Python (auditable, no numpy).
 
 * **pass@k** = P(≥1 of k succeeds) = ``1 − C(n−c,k)/C(n,k)`` (Chen et al.); rises with k.
 * **pass^k** = P(all k succeed) = ``C(c,k)/C(n,k)``; falls with k — the reliability metric.

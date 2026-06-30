@@ -1,4 +1,4 @@
-"""Checkpoint / resume (M7). See DESIGN §6(b).
+"""Checkpoint / resume (M7).
 
 Two layers of durability: a git commit of *tracked* changes at session end
 (deliberately not ``git add -A``, to keep ephemeral artifacts out of history) + a

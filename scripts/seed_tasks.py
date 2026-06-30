@@ -37,7 +37,7 @@ def feat(i: int, slug: str, *requires: str, weight: float = 1.0) -> dict:
 def task(
     id, title, goal, prompt, features, *,
     difficulty="capability", compaction_boundaries=0, interruption=False,
-    reference="", sim=None,
+    reference="", sim=None, verify=None,
 ) -> dict:
     t = {
         "id": id,
@@ -50,6 +50,8 @@ def task(
         "interruption": interruption,
         "reference_solution": reference,
     }
+    if verify:
+        t["verify"] = verify
     if sim is None and difficulty == "capability":
         sim = CAP_SIM
     if sim is None and difficulty == "regression":
@@ -57,6 +59,29 @@ def task(
     if sim:
         t["simulation"] = sim
     return t
+
+
+# Server-probe verification: actually starts the produced app and hits it over
+# HTTP (the harder, more realistic real-grader mode). Pure stdlib (urllib), fixed
+# port, polls for startup, always kills the server. Exit 0 == endpoint works.
+SERVER_PROBE = (
+    "python3 - <<'PY'\n"
+    "import subprocess, sys, time, urllib.request\n"
+    "p = subprocess.Popen([sys.executable, 'app.py'])\n"
+    "try:\n"
+    "    for _ in range(20):\n"
+    "        time.sleep(0.5)\n"
+    "        try:\n"
+    "            r = urllib.request.urlopen('http://localhost:8765/health', timeout=1)\n"
+    "            if r.status == 200 and r.read().strip() == b'ok':\n"
+    "                sys.exit(0)\n"
+    "        except Exception:\n"
+    "            pass\n"
+    "    sys.exit(1)\n"
+    "finally:\n"
+    "    p.terminate()\n"
+    "PY\n"
+)
 
 
 # Genuine, irreducible per-feature difficulty for the longer capability tasks
@@ -216,6 +241,48 @@ def build() -> list[dict]:
         ],
         difficulty="regression",
         reference="load_config() reading env with fallback defaults + test.",
+    ))
+
+    # --- Executable-verified task (REAL grading via `verify`) --------------
+    # Tightly specified so verification is deterministic and language-fixed —
+    # the real backend runs these commands against the produced workspace and
+    # grades by exit code (F2P), NOT by the agent's self-report. The simulated
+    # backend ignores `verify` and uses `features` as usual.
+    tasks.append(task(
+        "v01-slugify-verified",
+        "Slugify (executable-verified)",
+        "Implement a Python slugify() verified by running it.",
+        "Create a Python module `slugify.py` at the project root exposing a "
+        "function `slugify(s: str) -> str` that lowercases the input and replaces "
+        "every run of non-alphanumeric characters with a single hyphen, stripping "
+        "leading/trailing hyphens. Examples: slugify('Hello, World!') == "
+        "'hello-world'; slugify('  A__B  ') == 'a-b'.",
+        [feat(1, "slugify", "def slugify", "lowercase", "hyphen")],
+        difficulty="regression",
+        reference="slugify.py implementing the spec.",
+        verify=[
+            {"id": "hello-world",
+             "cmd": "python3 -c \"from slugify import slugify; assert slugify('Hello, World!')=='hello-world'\"",
+             "weight": 1.0},
+            {"id": "collapse-and-trim",
+             "cmd": "python3 -c \"from slugify import slugify; assert slugify('  A__B  ')=='a-b'\"",
+             "weight": 1.0},
+        ],
+    ))
+
+    # Harder real-grader mode: a running HTTP server, verified by probing it.
+    tasks.append(task(
+        "v02-health-endpoint-verified",
+        "Health endpoint (server-probe verified)",
+        "Implement a stdlib HTTP server with /health, verified by hitting it.",
+        "Create `app.py` using ONLY the Python standard library (no third-party "
+        "packages such as Flask). Running `python3 app.py` must start an HTTP "
+        "server on port 8765 that responds to GET /health with HTTP status 200 and "
+        "body exactly `ok`. The server should keep running until terminated.",
+        [feat(1, "health", "GET", "/health", "200", "ok")],
+        difficulty="regression",
+        reference="http.server-based app.py serving /health -> 200 'ok' on :8765.",
+        verify=[{"id": "server-responds", "cmd": SERVER_PROBE, "weight": 1.0}],
     ))
 
     return tasks

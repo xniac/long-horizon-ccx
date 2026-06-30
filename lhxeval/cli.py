@@ -14,7 +14,7 @@ from .backends import get_backend
 from .graders import grade_outcome, reference_solution_outcome
 from .runner import run_ab
 from .report import write_dashboard, write_results_json
-from .tasks.schema import Task, load_suite
+from .tasks.schema import load_suite
 
 DEFAULT_TASKS = Path(__file__).parent / "tasks" / "synthetic"
 
@@ -46,6 +46,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     tasks = load_suite(Path(args.tasks))
     if args.difficulty:
         tasks = [t for t in tasks if t.difficulty == args.difficulty]
+    if args.verified_only:
+        # Only tasks with executable `verify` checks — for a REAL A/B on a real
+        # backend graded by actual tests, not the agent's self-report.
+        tasks = [t for t in tasks if t.verify]
     if not tasks:
         print(
             f"WARNING: no tasks match difficulty filter "
@@ -90,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--seed", type=int, default=1000, help="base seed")
     pr.add_argument("--backend", default="simulated", help="simulated | sdk")
     pr.add_argument("--difficulty", default=None, help="capability | regression")
+    pr.add_argument("--verified-only", action="store_true",
+                    help="only tasks with executable `verify` checks (real-graded A/B)")
     pr.add_argument("--out", default="runs/latest")
     pr.set_defaults(func=cmd_run)
 

@@ -1,5 +1,5 @@
 """On-disk state: the progress ledger (``PROGRESS.md``) + the default-FAIL
-feature contract (``feature_list.json``). See DESIGN §6.
+feature contract (``feature_list.json``).
 
 Two non-obvious choices: the contract is JSON, not Markdown, because the model is
 less likely to rewrite it; contract writes are atomic (temp-then-rename) so a
@@ -99,20 +99,6 @@ class ProgressLedger:
     def __init__(self, progress_path: Path, events_path: Path):
         self.progress_path = progress_path
         self.events_path = events_path
-
-    def init(self, goal: str) -> None:
-        if self.progress_path.exists():
-            return
-        header = (
-            f"# Progress Log\n\n"
-            f"**Goal:** {goal}\n\n"
-            f"_Conventions: always read this file first; work one feature at a "
-            f"time; record proof before marking a feature passing; leave a clean "
-            f"state._\n\n"
-            f"## Session log\n\n"
-            f"- {_now()} — session initialised.\n"
-        )
-        atomic_write(self.progress_path, header)
 
     def append(self, line: str) -> None:
         # Append-only: O(1) per call. Atomicity is not critical here (worst case

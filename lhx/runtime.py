@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .checkpoint import load_checkpoint, save_checkpoint
+from .checkpoint import save_checkpoint
 from .config import Config
 from .memory import Memory
-from .state import FeatureList, ProgressLedger
+from .state import ProgressLedger
 
 
 class Runtime:
@@ -31,10 +31,8 @@ class Runtime:
         state_dir = self.cwd / config.state_dir
         self.events_path = state_dir / "events.jsonl"
         self.checkpoint_path = state_dir / "checkpoint.json"
-        self.signatures_path = state_dir / "signatures.json"
 
         self.ledger = ProgressLedger(self.progress_path, self.events_path)
-        self.features = FeatureList.load(self.feature_path)
         self.memory = Memory(self.brief_path, self.memory_path, config.memory_char_cap)
 
     # --- tool-call counting / signatures (used by loop guard + reflection) --
@@ -43,10 +41,6 @@ class Runtime:
 
     def signatures(self) -> list[str]:
         return [e["sig"] for e in self.ledger.tool_events() if "sig" in e]
-
-    # --- checkpoint helpers -------------------------------------------------
-    def load_checkpoint(self) -> dict:
-        return load_checkpoint(self.checkpoint_path)
 
     def save_checkpoint(self, data: dict) -> None:
         save_checkpoint(self.checkpoint_path, data)

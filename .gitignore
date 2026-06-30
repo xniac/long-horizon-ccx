@@ -2,6 +2,10 @@
 .env
 !.env.template
 
+# Operator's own session config for working in this repo (NOT the deliverable;
+# the drop-in module config lives in claude_config/).
+.claude/
+
 # Runtime / agent state written by the long-horizon module
 .lh/
 PROGRESS.md

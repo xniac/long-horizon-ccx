@@ -1,4 +1,4 @@
-"""Doom-loop detector + step-budget circuit breaker (M5). See DESIGN §6(c).
+"""Doom-loop detector + step-budget circuit breaker (M5).
 
 Pure functions over the event trail (hence trivially unit-tested): block when the
 last ``window`` tool signatures are identical, or hard-stop past ``step_budget``.

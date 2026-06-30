@@ -108,16 +108,3 @@ class Config(BaseModel):
         )
         cfg.memory_char_cap = _env_int("LHX_MEMORY_CHAR_CAP", cfg.memory_char_cap)
         return cfg
-
-    def workdir_path(self, base: str | os.PathLike[str], name: str) -> Path:
-        return Path(base) / name
-
-    def state_path(self, base: str | os.PathLike[str], name: str) -> Path:
-        d = Path(base) / self.state_dir
-        d.mkdir(parents=True, exist_ok=True)
-        return d / name
-
-
-# Default singleton convenience for hooks that don't want to thread config.
-def load_config() -> Config:
-    return Config.from_env()

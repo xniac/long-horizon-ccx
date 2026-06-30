@@ -11,7 +11,7 @@ a controlled A/B (module ON vs OFF) holding the model, tasks, and agent harness
 fixed.
 """
 
-from .config import Config, load_config
+from .config import Config
 
-__all__ = ["Config", "load_config"]
+__all__ = ["Config"]
 __version__ = "0.1.0"

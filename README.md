@@ -16,23 +16,24 @@ honest uncertainty.
 
 ## Headline result
 
-Simulated backend, 9 tasks × k=10 × 2 arms = 180 trials (`lhx-eval run -k 10`):
+Simulated backend, 11 tasks × k=10 × 2 arms = 220 trials (`lhx-eval run -k 10`):
 
 | metric | module ON | module OFF | Δ |
 |---|---|---|---|
-| pass@1 (macro) | **90.0%** | 38.9% | +51.1pp |
-| pass^3 (reliability) | **73.6%** | 33.3% | +40.3pp |
+| pass@1 (macro) | **91.8%** | 50.0% | +41.8pp |
+| pass^3 (reliability) | **78.4%** | 45.5% | +32.9pp |
 | compaction-survival | **80.0%** | 2.5% | +77.5pp |
 | resume-after-interruption | **93.3%** | 13.3% | +80.0pp |
-| goal-drift rate | **0.0%** | 61.1% | −61.1pp |
-| doom-loops / trial | **0.12** | 0.53 | −0.41 |
+| goal-drift rate | **0.0%** | 50.0% | −50.0pp |
+| doom-loops / trial | **0.10** | 0.44 | −0.34 |
 
-Paired success delta **+0.511 [+0.400, +0.611]** (95% bootstrap CI); McNemar
+Paired success delta **+0.418 [+0.327, +0.509]** (95% bootstrap CI); McNemar
 exact **p ≈ 2.8e-14** (helped 46, hurt 0). ⚠️ This is a **harness-validation**
 run, not a real-model capability claim: the numbers come from a *simulated* agent
 with known ground-truth effects, used to prove the harness **detects an effect it
-knows exists** (see DESIGN §8.8). The same harness runs unchanged against real
-Claude via the Agent-SDK / CLI backend.
+knows exists** (see DESIGN §5.8). For **real** metrics, the same harness runs
+against real Claude with **executable verification** (DESIGN §5.9, already
+working): `python scripts/smoke_sdk.py v01-slugify-verified`.
 
 ## Quickstart
 
@@ -42,7 +43,7 @@ pip install -e .
 python scripts/seed_tasks.py     # generate + validate the synthetic task suite
 lhx-eval validate                # reference-solution sanity check (graders not vacuous)
 lhx-eval run -k 10               # the paired A/B → runs/latest/{results.json,dashboard.html}
-pytest -q                        # 37 unit + integration tests
+pytest -q                        # 43 unit + integration tests
 
 # one-shot:
 scripts/run_eval.sh 10           # validate + run + point you at the dashboard
@@ -60,11 +61,19 @@ key via `.env`:
 cp .env.template .env          # then put your ANTHROPIC_API_KEY in .env
 pip install -e ".[sdk]"        # only if you want the Python Agent SDK transport
 
-# one tiny task, end-to-end, module ON — the simplest "does my key work?" check:
-python scripts/smoke_sdk.py                 # default task r01-hello-endpoint
-python scripts/smoke_sdk.py t01-multi-file-api
+# REAL grading: run a task that is verified by executable checks (not self-report)
+python scripts/smoke_sdk.py v01-slugify-verified        # runs the produced code
+python scripts/smoke_sdk.py v02-health-endpoint-verified # starts the server & probes it
 
-# the full paired A/B against real Claude instead of the simulated backend:
+# integration check on a self-report task (no executable verify):
+python scripts/smoke_sdk.py                 # default task r01-hello-endpoint
+
+# a REAL, executable-graded A/B over the verified tasks (ON vs OFF, ~$0.20):
+LHX_SDK_MAX_TURNS=25 lhx-eval run --backend sdk --verified-only -k 1
+# → all trials graded by executable checks; ON fires hooks, OFF inert; Δ≈0 on
+#   these short tasks (a correct negative control — the module helps on long tasks).
+
+# the full paired A/B against real Claude over the whole suite:
 lhx-eval run -k 3 --backend sdk
 ```
 
@@ -118,21 +127,19 @@ lhxeval/                 # the evaluation harness (the centerpiece)
   cli.py                 #   `lhx-eval run|validate`
   tasks/                 #   JSON task schema + synthetic suite
 scripts/                 # seed_tasks.py, install.sh, run_eval.sh
-tests/                   # 37 tests: math, guards, state, hooks, end-to-end smoke
+tests/                   # 43 tests: math, guards, state, hooks, end-to-end smoke
 ```
 
 ## What's real vs needs credentials
 
-Everything is implemented and tested offline. The `lhx` module, the eval harness,
-metrics, stats, graders, sandbox and dashboard are fully exercised by the
-deterministic **simulated** backend. The **real** backend
-(`ClaudeAgentSDKBackend`) is a complete headless-`claude -p` skeleton — it preps
-an isolated sandbox, installs the module's hooks, wires the ON/OFF arm via
-`LHX_ENABLED`, and reconstructs the trajectory from the on-disk artifacts the
-module writes — and is covered by a **mocked smoke test**
-([tests/test_backend_sdk.py](tests/test_backend_sdk.py)). The only thing it needs
-to run live is the `claude` CLI on PATH + `ANTHROPIC_API_KEY`; token/cost parsing
-from the session transcript is the one marked `TODO`.
+Everything is implemented and tested offline (simulated backend). The **real**
+backend (`ClaudeAgentSDKBackend`) is fully working and **validated live**: it preps
+an isolated sandbox, installs the module's hooks (`--setting-sources project`),
+wires the ON/OFF arm via `LHX_ENABLED`, runs real Claude (`claude -p` or the Python
+Agent SDK), captures cost/tokens (`--output-format json`), and grades the produced
+workspace with **executable verification** (`v01`/`v02` above). It just needs the
+`claude` CLI + `ANTHROPIC_API_KEY`. What remains future work: a *large* verified
+task suite and container isolation (see DESIGN §7) for a full real-model benchmark.
 
-See **[DESIGN.md](DESIGN.md)** for the full design, methodology, and the
-"how I validated the eval itself" section.
+See **[DESIGN.md](DESIGN.md)** for the full methodology, the eval-modes section,
+and "how I validated the eval itself" (incl. two real bugs the self-check caught).

@@ -1,0 +1,37 @@
+{
+  "id": "v02-health-endpoint-verified",
+  "title": "Health endpoint (server-probe verified)",
+  "goal": "Implement a stdlib HTTP server with /health, verified by hitting it.",
+  "prompt": "Create `app.py` using ONLY the Python standard library (no third-party packages such as Flask). Running `python3 app.py` must start an HTTP server on port 8765 that responds to GET /health with HTTP status 200 and body exactly `ok`. The server should keep running until terminated.",
+  "difficulty": "regression",
+  "features": [
+    {
+      "id": "F01-health",
+      "description": "Implement health",
+      "requires": [
+        "GET",
+        "/health",
+        "200",
+        "ok"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": false,
+  "reference_solution": "http.server-based app.py serving /health -> 200 'ok' on :8765.",
+  "verify": [
+    {
+      "id": "server-responds",
+      "cmd": "python3 - <<'PY'\nimport subprocess, sys, time, urllib.request\np = subprocess.Popen([sys.executable, 'app.py'])\ntry:\n    for _ in range(20):\n        time.sleep(0.5)\n        try:\n            r = urllib.request.urlopen('http://localhost:8765/health', timeout=1)\n            if r.status == 200 and r.read().strip() == b'ok':\n                sys.exit(0)\n        except Exception:\n            pass\n    sys.exit(1)\nfinally:\n    p.terminate()\nPY\n",
+      "weight": 1.0
+    }
+  ],
+  "simulation": {
+    "base_doom_loop_prob": 0.0,
+    "drift_prob_per_feature": 0.0,
+    "compaction_amnesia_prob": 0.0,
+    "cold_resume_fail_prob": 0.0,
+    "residual_fail_prob": 0.0
+  }
+}

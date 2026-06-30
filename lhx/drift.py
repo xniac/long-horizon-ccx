@@ -1,6 +1,6 @@
 """Goal-drift check (M6). The authoritative signal is the deterministic feature
 contract; the keyword heuristic below is only a cheap in-loop nudge (see the
-limitation note on ``keyword_drift``). See DESIGN §6(e).
+limitation note on ``keyword_drift``).
 """
 
 from __future__ import annotations

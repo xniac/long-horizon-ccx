@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 from lhxeval.backends import ClaudeAgentSDKBackend, Directives  # noqa: E402
 from lhxeval.env import load_dotenv  # noqa: E402
-from lhxeval.graders import grade_outcome  # noqa: E402
+from lhxeval.graders import grade  # noqa: E402
 from lhxeval.tasks.schema import load_suite  # noqa: E402
 from lhx.config import Config  # noqa: E402
 
@@ -53,14 +53,13 @@ def main() -> int:
           f"{backend._resolve_transport()} — this can take a few minutes ...\n")
 
     outcome = backend.run(task, Config(enabled=True), seed=0, directives=Directives())
-    grade = grade_outcome(task, outcome)
+    result = grade(task, outcome)
 
-    # This script is an INTEGRATION check, not a benchmark: it verifies the module
-    # actually ran against real Claude. The token "success" below is graded off the
-    # agent's self-reported feature_list.json evidence — i.e. it trusts the
-    # contract, NOT an independent test. A trustworthy real A/B needs per-task
-    # executable verification (see DESIGN §10); the simulated backend is the
-    # validated scoring path.
+    # This verifies the module actually ran against real Claude (integration). If
+    # the task has executable `verify` checks, the grade below is REAL (runs tests
+    # against the produced workspace); otherwise it's the agent's self-report and
+    # should not be trusted (use a verify-task like v01-slugify-verified for a real
+    # signal).
     import json as _json
     from collections import Counter
 
@@ -79,9 +78,15 @@ def main() -> int:
     print(f"  crossed compaction   : {outcome.forced_compaction}")
     print(f"  tokens / cost(USD)   : {outcome.tokens} / {outcome.cost_usd:.4f}")
 
-    print("\n=== contract self-report (NOT independent verification) ===")
-    print(f"  features marked pass : {outcome.features_completed}")
-    print(f"  token grade          : success={grade.success} partial={grade.partial_credit:.2f}")
+    if task.verify and outcome.checks:
+        print("\n=== REAL grade (executable verification of the produced workspace) ===")
+        print(f"  checks               : {outcome.checks}")
+        print(f"  success={result.success}  partial={result.partial_credit:.2f}")
+    else:
+        print("\n=== contract self-report (NOT independent verification) ===")
+        print(f"  features marked pass : {outcome.features_completed}")
+        print(f"  token grade          : success={result.success} partial={result.partial_credit:.2f}")
+        print("  (this task has no executable `verify` checks — grade is the agent's claim)")
 
     cli = backend.last_cli or {}
     print("\n=== claude CLI ===")

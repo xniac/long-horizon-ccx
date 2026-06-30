@@ -1,5 +1,5 @@
 """Uncertainty + significance — pure Python (no scipy); small and exact, since
-eval suites are small (n=20–50, k=3–5) and normal approximations mislead. DESIGN §8.5.
+eval suites are small (n=20–50, k=3–5) and normal approximations mislead.
 
 * **Paired bootstrap CI** — resamples (task,seed) pairs to respect the pairing.
 * **McNemar exact** — two-sided binomial on the discordant pairs (paired binary test).

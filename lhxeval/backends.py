@@ -1,5 +1,5 @@
 """Agent backends behind one interface; a backend returns a ``RunOutcome`` that
-graders score by outcome (not path). See DESIGN §5.3-7 / §8.8.
+graders score by outcome (not path).
 
 * ``SimulatedBackend`` (default, offline) — deterministic model of a long-horizon
   run whose mitigations are gated on the *real* ``lhx.Config`` toggles, so it
@@ -33,6 +33,8 @@ class RunOutcome:
     resumed_ok: bool = False
     drifted: bool = False
     events: list[dict] = field(default_factory=list)
+    # Executable verification results for real runs: check_id -> passed.
+    checks: dict[str, bool] = field(default_factory=dict)
 
     def artifact_text(self) -> str:
         return "\n".join(self.artifact.values())
@@ -206,7 +208,6 @@ class ClaudeAgentSDKBackend(AgentBackend):
         model: str = "claude-haiku-4-5-20251001",
         max_turns: int = 80,
         timeout_seconds: int = 900,
-        max_budget_usd: float = 1.0,
         transport: str = "auto",
         permission_mode: str = "bypassPermissions",
         keep_sandbox: bool = False,
@@ -214,7 +215,6 @@ class ClaudeAgentSDKBackend(AgentBackend):
         self.model = model
         self.max_turns = max_turns
         self.timeout_seconds = timeout_seconds
-        self.max_budget_usd = max_budget_usd
         self.transport = transport
         # Headless tool use needs a non-interactive permission mode, or the CLI
         # blocks on a permission/trust prompt and looks "stuck". Sandboxes are
@@ -272,7 +272,27 @@ class ClaudeAgentSDKBackend(AgentBackend):
             outcome = self._reconstruct_outcome(ws, FeatureList)
             outcome.tokens = cost.get("tokens", 0)
             outcome.cost_usd = cost.get("usd", 0.0)
+            # Real, outcome-based grading: run the task's executable checks
+            # against the produced workspace (must happen before teardown).
+            if task.verify:
+                outcome.checks = self._run_checks(ws, task.verify, env)
             return outcome
+
+    def _run_checks(self, ws, checks, env) -> dict:
+        """Run each VerifyCheck.cmd in the workspace; exit 0 == passed."""
+        import subprocess
+
+        results: dict[str, bool] = {}
+        for c in checks:
+            try:
+                r = subprocess.run(
+                    ["bash", "-lc", c.cmd], cwd=str(ws), env=env,
+                    capture_output=True, text=True, timeout=60, check=False,
+                )
+                results[c.id] = r.returncode == 0
+            except (subprocess.TimeoutExpired, OSError):
+                results[c.id] = False
+        return results
 
     def _run_cli(self, ws, env, prompt: str) -> dict:
         import shutil as _shutil
@@ -391,5 +411,10 @@ def get_backend(name: str, **kwargs) -> AgentBackend:
     if name in ("sim", "simulated"):
         return SimulatedBackend()
     if name in ("sdk", "claude", "claude-sdk", "cli"):
+        import os
+
+        kwargs.setdefault("model", os.environ.get("LHX_SDK_MODEL", "claude-haiku-4-5-20251001"))
+        kwargs.setdefault("max_turns", int(os.environ.get("LHX_SDK_MAX_TURNS", "80")))
+        kwargs.setdefault("timeout_seconds", int(os.environ.get("LHX_SDK_TIMEOUT", "900")))
         return ClaudeAgentSDKBackend(**kwargs)
     raise ValueError(f"unknown backend: {name}")

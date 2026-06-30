@@ -1,6 +1,6 @@
 """A/B driver. Independent variable: the module (ON vs OFF); everything else
 fixed. Paired design — for each (task, seed) both arms share the seed, so the
-per-pair difference cancels task/seed variance. Backend-agnostic. See DESIGN §8.1.
+per-pair difference cancels task/seed variance. Backend-agnostic.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from pathlib import Path
 from lhx.config import Config
 
 from .backends import AgentBackend, Directives, SimulatedBackend, get_backend
-from .graders import check_drift, grade_outcome
+from .graders import check_drift, grade
 from .metrics import ArmMetrics, summarize_arm
 from .results import TrialResult
 from .stats import CI, McNemarResult, beta_rate, mcnemar_exact, paired_bootstrap_diff
@@ -39,21 +39,21 @@ def run_trial(
 ) -> TrialResult:
     cfg = arm_config(arm)
     outcome = backend.run(task, cfg, seed, _directives_for(task))
-    grade = grade_outcome(task, outcome)
-    # Ground-truth drift comes from the backend. The keyword-drift heuristic is
-    # only meaningful on *real prose* artifacts, so we apply it as an extra
-    # signal only for non-simulated backends (it would false-positive on the
-    # simulated backend's synthetic token-bag artifacts).
+    result = grade(task, outcome)
+    # Ground-truth drift comes from the backend. The keyword-drift heuristic is a
+    # weak prose signal, so we only apply it on a real backend AND only when there
+    # is no executable verification (with executable checks the grade is truth, and
+    # keyword-drift on the evidence string is just noise).
     drifted = outcome.drifted
-    if not isinstance(backend, SimulatedBackend):
+    if not isinstance(backend, SimulatedBackend) and not task.verify:
         drifted = drifted or check_drift(task, outcome)
     return TrialResult(
         task_id=task.id,
         arm=arm,
         seed=seed,
         trial_index=trial_index,
-        success=grade.success,
-        partial_credit=grade.partial_credit,
+        success=result.success,
+        partial_credit=result.partial_credit,
         steps=outcome.steps,
         tokens=outcome.tokens,
         cost_usd=outcome.cost_usd,
@@ -62,7 +62,7 @@ def run_trial(
         forced_compaction=outcome.forced_compaction,
         interrupted=outcome.interrupted,
         resumed_ok=outcome.resumed_ok,
-        grader_detail=grade.detail,
+        grader_detail=result.detail,
         transcript=outcome.events,
     )
 

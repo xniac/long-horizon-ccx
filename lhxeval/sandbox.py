@@ -1,4 +1,4 @@
-"""Isolated per-trial workspace (DESIGN §8.6). A fresh temp dir per trial, seeded
+"""Isolated per-trial workspace. A fresh temp dir per trial, seeded
 with the immutable BRIEF + default-FAIL contract and torn down after — so trials
 stay independent (no leftover files or prior-trial git history to read).
 """

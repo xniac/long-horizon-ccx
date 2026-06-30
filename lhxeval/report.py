@@ -1,6 +1,6 @@
 """Aggregate an ABResult into results.json + a self-contained static HTML
 dashboard (per-arm table, paired deltas + CIs, McNemar, pass@k/pass^k curves).
-HTML lives in a sibling ``dashboard.html`` ``string.Template``. See DESIGN §9.
+HTML lives in a sibling ``dashboard.html`` ``string.Template``.
 """
 
 from __future__ import annotations

@@ -1,8 +1,9 @@
-"""Graders — score the outcome, not the path (DESIGN §8.3). Deterministic and
-outcome-based: each feature passes iff the produced artifact contains all its
-``requires`` tokens (F2P/P2P-style); success = all features pass, with weighted
-partial credit. Deterministic-first, because pass^k is only trustworthy once
-graders are.
+"""Graders — score the outcome, not the path. ``grade()`` dispatches between two
+modes: **executable checks** (run the task's ``verify`` commands against the
+produced workspace; real backend) and the **token grader** (the produced artifact
+must contain each feature's ``requires`` tokens; simulated backend). Both give
+weighted partial credit; success = everything passes. Deterministic-first, because
+pass^k is only trustworthy once graders are.
 """
 
 from __future__ import annotations
@@ -24,8 +25,39 @@ class GradeResult:
     detail: dict
 
 
+def grade(task: Task, outcome: RunOutcome) -> GradeResult:
+    """Pick the right grader. If the task has executable verify checks and they
+    were run (real backend), grade by them — the honest, outcome-based signal.
+    Otherwise fall back to the token grader (simulated backend)."""
+    if task.verify and outcome.checks:
+        return grade_checks(task, outcome)
+    return grade_outcome(task, outcome)
+
+
+def grade_checks(task: Task, outcome: RunOutcome) -> GradeResult:
+    """Grade by executable verification results (F2P/P2P): success = all checks
+    pass; weighted partial credit. Grades what was *built*, not the agent's claim."""
+    satisfied, unsatisfied = [], []
+    weight_total = weight_ok = 0.0
+    for c in task.verify:
+        weight_total += c.weight
+        if outcome.checks.get(c.id):
+            satisfied.append(c.id)
+            weight_ok += c.weight
+        else:
+            unsatisfied.append(c.id)
+    return GradeResult(
+        success=(not unsatisfied and len(task.verify) > 0),
+        partial_credit=(weight_ok / weight_total) if weight_total else 0.0,
+        satisfied=satisfied,
+        unsatisfied=unsatisfied,
+        detail={"mode": "executable-checks", "n_checks": len(task.verify)},
+    )
+
+
 def grade_outcome(task: Task, outcome: RunOutcome) -> GradeResult:
-    """Deterministic outcome grader with weighted partial credit."""
+    """Deterministic outcome grader with weighted partial credit (token-based;
+    used by the simulated backend, where the artifact *is* the produced tokens)."""
     satisfied: list[str] = []
     unsatisfied: list[str] = []
     weight_total = 0.0

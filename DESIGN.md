@@ -1,347 +1,254 @@
-# 方案设计文档 —— Claude Code 的 Long-Horizon 扩展模块
+# 方案设计文档 —— 一套面向 Long-Horizon Agent 扩展的评估 Harness
 
 > Take-home 方向：**Long-horizon**；目标 harness：**Claude Code**。
-> 交付物由一个核心思想串起的两部分组成：(1) 一个轻量、基于 hooks 的**扩展模块**，
-> 让 Claude Code 具备跨多个会话围绕单一目标持续工作的能力；(2) 一套受控的**评估
-> harness**，用来回答唯一重要的问题——*"它在产品里真的更好吗？我们凭什么知道？"*
-> 评估 harness 是本方案的重心。
+> 本方案交付两部分：(1) 一个让 Claude Code 跨会话持续工作的轻量扩展模块 `lhx`；
+> (2) 一套受控的 **A/B 评估 harness**。**评估方法学是本方案的主体**——回答"它在产品里真的更好吗、
+> 我们凭什么相信这个数字"。模块是*被测对象*，评估方法学是*主角*。
 
 ---
 
 ## 1. 摘要（BLUF）
 
-Long-horizon 的 agent 任务失败，往往不是因为模型在**单个步骤**上能力不足，而是因为
-整个**运行过程**跨越的 token 量、会话数、以及出错机会，都超出了单个 context window
-所能承载的范围。Claude Code 本身已经提供了解决这一问题所需的集成面——生命周期
-**hooks** 与 **Agent SDK**——但没有在其之上提供 long-horizon 的策略层。
+Long-horizon agent 任务失败，多半不是单步能力不足，而是整个运行跨越的 token、会话与出错
+机会超出了单个 context window。`lhx` 用六个 hooks 给 Claude Code 补上一层跨会话策略
+（§2）。但本方案真正的工作量在**如何严肃地评估这层策略**：一套配对 A/B harness，支持
+**两种 backend**（确定性仿真 / 真实 Claude）、**多种 grader**（确定性 token / 可执行
+F2P / model-judge / 以及被明确拒绝的"自报"反模式），并先**验证评估器本身**再相信任何结论。
 
-`lhx` 就是这一策略层：一个精简、注释充分的 Python 模块（约 1.1k 行），通过六个 hooks
-接入 Claude Code。本方案的组织方式是**问题驱动**的——先枚举长程任务的具体失败模式
-（§2），再用一张表把每个失败模式映射到一个具体方法（§4），并明确说明每个方法**与
-Anthropic 公开的 harness 工作及其他现有资源的异同、以及为什么这样改**（§5）。
-
-**头条结果（simulated backend，9 个任务 × k=10 × 2 个 arm = 180 次 trial）：**
+**头条结果（simulated backend，11 个任务 × k=10 × 2 arm = 220 trial）：**
 
 | 指标 | 模块 ON | 模块 OFF | Δ |
 |---|---|---|---|
-| pass@1（macro） | **90.0%** | 38.9% | +51.1pp |
-| pass^3（可靠性） | **73.6%** | 33.3% | +40.3pp |
+| pass@1（macro） | **91.8%** | 50.0% | +41.8pp |
+| pass^3（可靠性） | **78.4%** | 45.5% | +32.9pp |
 | compaction 存活率 | **80.0%** | 2.5% | +77.5pp |
 | 中断后 resume 成功率 | **93.3%** | 13.3% | +80.0pp |
-| 目标漂移率（goal-drift） | **0.0%** | 61.1% | −61.1pp |
-| doom-loop / trial | **0.12** | 0.53 | −0.41 |
+| 目标漂移率 | **0.0%** | 50.0% | −50.0pp |
+| doom-loop / trial | **0.10** | 0.44 | −0.34 |
 
-配对成功率差异 **+0.511 [+0.400, +0.611]**（95% bootstrap CI）；McNemar 精确检验
+配对成功率差异 **+0.418 [+0.327, +0.509]**（95% bootstrap CI）；McNemar 精确检验
 **p ≈ 2.8e-14**（helped 46，hurt 0）。
 
-> ⚠️ **这是一次 harness 自检（harness-validation）运行，不是对真实模型的能力宣称。**
-> 数字来自一个具有**已知 ground-truth 效应**的 *simulated* agent（见 §8.8）；它的作用是
-> 证明"评估 harness 能正确地检测出一个已知存在的效应"，而非证明模块在真实 Claude 上能提
-> 升多少。效应之所以如此干净，是因为模块的机制**机械地**消除了对应失败模式（例如进度一旦
-> 落到磁盘上，compaction 在物理上就无法把它抹掉），而非因为仿真被人为调得偏向 ON——ON 仍
-> 然不是 100%（见 compaction 存活率 80%）。同一套 harness 可原样跑在经 Agent SDK / CLI
-> 接入的真实 Claude 上，届时数字会更小、更嘈杂，但统计与读法完全一致。
+> ⚠️ **这是一次 harness 自检（harness-validation）运行，不是对真实模型的能力宣称。** 数字
+> 来自一个具有**已知 ground-truth 效应**的仿真 backend（§5.8）：它存在的意义是证明"评估器
+> 能正确检测出一个已知效应、且在阴性对照上不误报"，而非证明模块在真实 Claude 上提升多少。
+
+**真实集成 A/B（real backend，`lhx-eval run --backend sdk --verified-only`，Haiku）：** 在两个
+executable-verified 任务上跑了真实的 ON×OFF A/B（4 trial，总计约 $0.20），全部由**可执行检查**
+（非 agent 自报）判定 `success=True`；ON 臂 hooks 实际触发（8–16 个工具事件/任务），OFF 臂
+inert（0 事件）。pass@1 ON 1.0 vs OFF 1.0（Δ=0）——这是**正确的阴性对照**：这些是短任务，模块
+的价值在长程任务上，此处本就不应有差异。它打通了"真实 Claude + 真实 hooks + 可执行评分"的
+完整闭环；规模化到更大的可验证长程任务集是下一步（§5.9 / §7）。
 
 ---
 
-## 2. 长程任务为什么会失败：七个具体失败模式
+## 2. 被测问题与对应方法
 
-整个方案围绕下面这组**可命名、可观测**的失败模式展开。它们来自 Anthropic 的工程博客与
-社区实践（出处见 §5）：
+`lhx` 针对一组**可命名、可观测**的长程失效模式。下表既是问题清单，也是方法映射；
+"=" 表示与某来源基本相同（忠实移植），"+" 表示新增/修改（理由见 §3）。
 
-- **M1 一次性做完（one-shotting）：** agent 试图在单个会话里做完整个项目，结果在某个
-  特性做到一半时耗尽 context。
-- **M2 过早宣布胜利（premature victory）：** 后续会话看到此前的进度，误判任务已完成而
-  提前停止。
-- **M3 Context rot / 注意力预算：** 模型表现"随着输入长度增加而越来越不可靠"
-  （Chroma, *Context Rot*, 2025）；重读陈旧历史的每个 token 都是浪费。
-- **M4 跨会话健忘：** "每个新会话开始时都没有此前的任何记忆"——像轮班的工程师，容易
-  把已修复的错误重新犯一遍。
-- **M5 Doom loop / 失控成本：** 用相同参数反复重试同一个工具调用；或会话无限拉长、
-  成本失控。
-- **M6 目标漂移（goal drift）：** 在长运行中缓慢偏离最初的目标，去优化一个相邻但不对的东西。
-- **M7 中断后无法恢复：** 进程被杀 / 限流 / 崩溃后，冷启动会话丢失进度、从头再来。
-
-**为什么是现在。** METR 的 *Measuring AI Ability to Complete Long Tasks* 发现，
-50%-任务完成时间跨度（time horizon）**大约每 7 个月翻一番**。随着单模型能力前沿延伸到
-数小时级任务，约束条件从"模型能不能做这一步"转移到"**harness** 能不能让整个运行跨会话
-保持连贯"。`lhx` 构建并衡量的，正是这一 harness 层。
-
----
-
-## 3. 目标与非目标
-
-**范围内：** 针对 M1–M7 的方法（见 §4）+ **一套可复现的、配对 A/B 评估 harness**
-（确定性 graders、long-horizon 专属指标、诚实的不确定性度量、静态 dashboard）。
-
-**不在范围内：** 多 agent 编排、托管运行时、实时 GUI、生产级安全加固、大规模真实
-任务库。真实 backend（`ClaudeAgentSDKBackend`）已实现为一个完整的 headless `claude -p`
-骨架（隔离沙箱、安装 hooks、用 `LHX_ENABLED` 切换 arm、从磁盘产物重建 trajectory），并有
-mock 化 smoke test 覆盖；真正跑通只差 `claude` CLI + `ANTHROPIC_API_KEY`（从 transcript
-解析 token/cost 是唯一标注的 `TODO`）。把 simulated 演示作为主路径，是因为它**确定性、可
-复现、零成本**，且只有它能提供"已知答案"来验证 harness 本身（§8.8）——真实模型的运行是
-不确定且计费的，适合作为手动抽查而非主结论。
-
----
-
-## 4. 问题 → 方法 总览（本方案的主线）
-
-每个失败模式对应一个方法、一个落点（hook + 磁盘文件）、以及它与现有工作的关系
-（"=" 表示与某来源基本相同，"+" 表示新增/修改，详见 §5）。
-
-| 失败模式 | lhx 的方法 | 落点（hook / 文件） | 与现有工作的关系 |
+| 失效模式 | lhx 的方法 | 落点（hook / 文件） | 关系 |
 |---|---|---|---|
-| **M1** 一次性做完 | default-FAIL 特性契约 + "一次只做一个特性" 约定 | SessionStart 读 / Stop 把守；[feature_list.json](lhx/state.py)、[CLAUDE.md](claude_config/CLAUDE.md) | = cwc 契约（reimplement） |
-| **M2** 过早宣布胜利 | ① **completion gate**：契约未全通过则阻止 Stop ② **fresh-context evaluator** 独立复现验证 | Stop（[stop.py](lhx/hooks/stop.py)）、SubagentStop（[evaluator.md](agents/evaluator.md)） | = cwc evaluator；**+** completion gate（见 §5.3-6） |
-| **M3** Context rot | 把状态放到磁盘 + 常量大小 `MEMORY.md`（只保留"最近发生了什么"） | PostToolUse 写（[memory.py](lhx/memory.py)） | **+** 来自 Codex 常量记忆（cwc 无） |
-| **M4** 跨会话健忘 | progress ledger + **SessionStart 主动注入 resume 上下文**（含"验证而非轻信"指令） | SessionStart（[session_start.py](lhx/hooks/session_start.py)）、[PROGRESS.md](lhx/state.py) | = cwc handoff；**+** 在 hook 层主动注入（见 §5.3-3） |
-| **M5** Doom loop / 失控成本 | 对 `(tool,args)` 哈希做最近-N 重复检测 + step-budget 熔断 | PreToolUse（[loop_guard.py](lhx/loop_guard.py)） | **+** 来自 Kilocode（cwc 无） |
-| **M6** 目标漂移 | 周期性 reflection 提示 + 不可变 `BRIEF.md` 关键词漂移启发式（仅作环内提示） | PostToolUse（[reflection.py](lhx/reflection.py)、[drift.py](lhx/drift.py)） | **+** reflection 来自社区；drift 来自 Codex（cwc 无） |
-| **M7** 中断后恢复 | git checkpoint + 类型化 `.lh/checkpoint.json`；resume 时重跑 SessionStart | Stop / SessionStart（[checkpoint.py](lhx/checkpoint.py)） | = cwc commit-on-stop；**+** 类型化 checkpoint + resume 注入 |
+| **M1** 一次性做完、中途耗尽 context | default-FAIL 特性契约 + "一次一个特性"约定 | SessionStart / Stop；[feature_list.json](lhx/state.py)、[CLAUDE.md](claude_config/CLAUDE.md) | = cwc |
+| **M2** 过早宣布胜利 | completion gate + fresh-context evaluator | Stop（[stop.py](lhx/hooks/stop.py)）、SubagentStop（[evaluator.md](agents/evaluator.md)） | = cwc evaluator / **+** gate |
+| **M3** context rot / 注意力预算 | 状态落盘 + 常量大小 `MEMORY.md` | PostToolUse（[memory.py](lhx/memory.py)） | **+** Codex 常量记忆 |
+| **M4** 跨会话健忘 | progress ledger + SessionStart 主动注入 resume 上下文 | SessionStart（[session_start.py](lhx/hooks/session_start.py)） | = cwc handoff / **+** 主动注入 |
+| **M5** doom loop / 失控成本 | `(tool,args)` 哈希的最近-N 重复检测 + step-budget 熔断 | PreToolUse（[loop_guard.py](lhx/loop_guard.py)） | **+** Kilocode |
+| **M6** 目标漂移 | 周期性 reflection + 不可变 `BRIEF.md` 关键词启发式 | PostToolUse（[reflection.py](lhx/reflection.py)、[drift.py](lhx/drift.py)） | **+** 社区 / Codex |
+| **M7** 中断后无法恢复 | git checkpoint + 类型化 `.lh/checkpoint.json` + resume 注入 | Stop / SessionStart（[checkpoint.py](lhx/checkpoint.py)） | = cwc commit-on-stop / **+** 类型化 checkpoint |
 
-> 设计原则（Anthropic）：*"harness 的每个组件都编码了一个关于'模型做不到什么'的假设。"*
-> 因此每个方法都是**单一可开关**（§5.3-1），以便在模型升级时被重新简化或移除。
-
----
-
-## 5. 与 Anthropic harness 工作及现有资源的异同（重点：改了什么、为什么）
-
-### 5.1 参考来源
-- Anthropic 工程博客 **《Effective harnesses for long-running agents》**（2025-11）：
-  提出 *initializer agent + coding agent* 两段式 harness，核心组件是 `init.sh`、
-  `claude-progress.txt`、`feature-list.json`、git 历史。
-- Anthropic 官方仓库 **`anthropics/cwc-long-running-agents`**（Code with Claude 的
-  long-running-agents 参考实现；明确声明是"示例配料，非开箱即用的 harness"）：以 shell
-  hooks + 一个子 agent 落地"质量闭环"原语——
-  `verify-gate.sh` / `track-read.sh`（default-FAIL 写入门 + 证据读取追踪，PreToolUse 于
-  `Write|Edit`）、`agents/evaluator.md`（fresh-context，`PASS`/`NEEDS_WORK`）、
-  `commit-on-stop.sh`（Stop）、`kill-switch.sh`（`AGENT_STOP`）、`steer.sh`（`STEER.md`）、
-  `PROGRESS.md` + `CLAUDE.md` 约定。
-- Anthropic 博客 **《Effective context engineering for AI agents》**（2025-09）：
-  context engineering、context rot、注意力预算。
-- Anthropic 博客 **《Demystifying evals for AI agents》**（2026-01）：本方案评估方法论
-  的直接来源（task/trial/grader/outcome、pass@k vs pass^k、capability/regression、
-  按结果而非路径评分、干净沙箱、参考解、读 transcript）。
-- 其他：Codex `/goal` + PLANS.md/AGENTS.md（常量记忆、目标跨中断存活）；Kilocode
-  （最近-N tuple 的 doom-loop 检测、"降挡"）。
-
-> 出处链接：[Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)、
-> [anthropics/cwc-long-running-agents](https://github.com/anthropics/cwc-long-running-agents)。
-> 注意版本漂移：2025–2026 间 hook 事件列表与 SDK 命名多次变更；以官方文档为准。
-
-### 5.2 我们**原样移植**的部分（与 cwc 基本相同，不再展开）
-这些是经过验证的先验工作，我们用 Python hooks 忠实重写，**不claim新颖**：
-**default-FAIL 特性契约**、**fresh-context evaluator**（`PASS`/`NEEDS_WORK`、无写工具）、
-**agent-maintained handoff**（`PROGRESS.md` + `CLAUDE.md` 约定 + commit-on-stop）、
-**operator controls**（kill-switch `AGENT_STOP` + steering `STEER.md`）。
-
-### 5.3 我们**修改 / 新增**的部分（重点 + 原因）
-
-1. **单一可开关 `Config` + 配对 A/B（最核心的差异）。** cwc 把原语作为"示例配料"散落
-   在各 shell 脚本里，无法整体开关。我们把七个方法全部收敛到一个
-   [Config](lhx/config.py) 之后，并支持 per-primitive 消融。*为什么：* A/B 实验的有效性
-   取决于"除被测变量外其余全等"——把所有原语收到一个开关后，ON/OFF 两臂可以共用同一份
-   配置、同一个 harness、同一组 seed，唯一的差别就是这个布尔量；否则混入的环境差异会和
-   模块效应混淆，差值无法归因。per-primitive 开关进一步支持**消融**：定位到底是哪个原语
-   在贡献增益，而不是只能看整体。
-
-2. **评估 harness + long-horizon 专属指标 + 纯 Python 统计（cwc 完全没有）。** cwc 只给
-   原语，不给度量。我们补上整套 harness（§8）：除了 pass@1/pass^k，还专门隔离了
-   **compaction 存活率、中断后 resume 成功率、目标漂移率、doom-loop 频次**——这些是标准
-   benchmark（SWE-bench/Terminal-Bench）不会单独拆出来的、恰恰能体现长程能力的指标。
-   统计用纯 Python 实现（paired bootstrap / McNemar exact / Beta 后验），零 scipy 依赖。
-   *为什么：* primitives 已是验证过的先验工作，再实现一遍价值有限；真正缺的是"它有没有用、
-   用多少、可信度多高"——而通用 benchmark 的 pass@1 看不到长程特有的失效（compaction 丢
-   目标、中断后无法恢复），所以必须单独建指标。纯 Python、零 scipy 让结果**一行安装即可
-   复现**，也把 pass@k/pass^k、bootstrap 这些数值细节摊在明面上而非藏进黑盒依赖里。
-
-3. **SessionStart 主动注入 resume 上下文。** cwc 依赖 agent 自己"记得"先读 `PROGRESS.md`。
-   我们在 hook 层把进度/近期 commit/PROGRESS 末尾**主动注入**到上下文，并利用
-   SessionStart 在 resume 时重跑（`source="resume"`）保证刷新，且显式加入"验证而非轻信
-   此前进度"的指令。*为什么：* 把"会不会读"从模型自觉变成 harness 保证，直接对应 M4。
-
-4. **Doom-loop 检测 + step-budget 熔断（cwc 没有）。** 来自 Kilocode 模式：对
-   `(tool,args)` 哈希、最近-N 全同则阻断，并给出"不要用相同参数重试——降挡"的具体消息。
-   *为什么：* M5 是自主长跑里最常见的失控来源，cwc 的质量闭环不覆盖它。
-
-5. **周期性 reflection + 常量大小 `MEMORY.md`（cwc 没有）。** 来自社区"强制 reflection"
-   与 Codex 常量记忆。*为什么：* 对应 M6/M3——`PROGRESS.md` 会越来越长，需要一个固定
-   大小的通道承载"最近发生了什么"以跨越 compaction。
-
-6. **用 evaluator + completion gate 替代 cwc 的 `verify-gate.sh` 写入门（一个有意的取舍，
-   而非遗漏）。** cwc 用 PreToolUse 写入门：除非本会话 Read 过一个**文件名匹配特定后缀**
-   （`*screenshots/*`、`*-result.txt` 等）的证据文件，否则禁止写 `test-results.json`。
-   我们改为：① 契约数据模型要求 `mark_pass(evidence=...)` 携带证据；② 由 **fresh-context
-   evaluator 实际复现**验证；③ Stop 的 completion gate 把守"未全通过不准停"。
-   *为什么：* "读过某后缀文件"只是证据的**代理**，可被绕过；fresh-context 复现是更强的
-   独立验证。*代价/诚实声明：* 我们因此**没有**移植 `verify-gate.sh`/`track-read.sh` 的
-   硬写入门——作为纵深防御，它可以低成本补回（PreToolUse 拦截对 `feature_list.json` 的写、
-   要求本会话有证据读取），列入未来工作。
-
-7. **用 simulated ground-truth backend 验证评估本身（未在任何现有资源见到）。** 见 §8.8。
-   *为什么：* 一套评估如果从没在"已知答案"的输入上验证过，它报出的差异既可能是真效应，也
-   可能是 grader 的 bug 或指标的假象——两者无法区分。先用一个植入了已知效应的仿真跑一遍，
-   能确认 harness 在该报阳性时报阳性、在阴性对照（regression 子集）上不误报，从而把"评估
-   本身的错误"从后续真实结论里排除掉。
+**为什么是现在：** METR 的 *Measuring AI Ability to Complete Long Tasks* 发现 50%-任务完成
+时间跨度约每 7 个月翻一番——约束从"模型能否做这一步"转向"harness 能否让运行跨会话保持
+连贯"。每个方法都**单一可开关**（Anthropic 原则：harness 组件编码假设，应随模型升级被
+重新简化）；这也正是干净 A/B 的前提（§5.1）。
 
 ---
 
-## 6. 架构
+## 3. 与 Anthropic 及现有工作的异同
+
+**参考来源（确有其文/其码）：** Anthropic 博客 *Effective harnesses for long-running agents*
+（initializer + coding agent 两段式）、官方仓库
+[`anthropics/cwc-long-running-agents`](https://github.com/anthropics/cwc-long-running-agents)
+（`verify-gate.sh`/`evaluator.md`/`commit-on-stop.sh`/`kill-switch`/`steer`，自述"示例配料"）、
+*Effective context engineering*、以及 *Demystifying evals for AI agents*（本方案评估方法学的
+直接来源）；外加 Codex `/goal`（常量记忆）与 Kilocode（doom-loop 检测）。
+
+**原样移植（不主张新颖性）：** default-FAIL 契约、fresh-context evaluator、handoff
+（PROGRESS + CLAUDE.md + commit-on-stop）、operator controls（kill-switch / steer）。
+
+**修改 / 新增（与评估直接相关的重点）：**
+1. **单一可开关 `Config` + 配对 A/B。** cwc 的原语散在各 shell 脚本里无法整体开关；收敛到
+   一个 [Config](lhx/config.py) 后，ON/OFF 两臂共用一切、只差一个布尔量，效应才可归因。
+2. **整套评估 harness + long-horizon 专属指标（cwc 没有）。** 见 §5。
+3. **用 evaluator + completion gate 替代 cwc 的 `verify-gate.sh` 写入门**（有意取舍）：
+   "读过某后缀文件"只是证据代理、可被绕过；fresh-context 复现是更强验证。代价是没移植硬
+   写入门，列入未来工作。
+4. **用仿真 ground-truth 验证评估器本身**（§5.8）+ **可执行验证做真实评分**（§5.9）——两者
+   在现有资源里都没见到现成方案。
+
+---
+
+## 4. 架构与集成面
 
 ```
-        Claude Code  /  Agent SDK   （agent harness —— 在 A/B 中保持固定）
-                 │   触发生命周期 hooks（stdin 上 JSON → stdout 上 JSON）
-                 ▼
-   ┌─────────────────────────────────────────────────────────────┐
-   │  lhx hooks  (lhx/hooks/*.py —— 薄适配层)                       │
-   │   SessionStart → 注入 resume 上下文                            │
-   │   PreToolUse   → kill-switch / steering / doom-loop / budget  │
-   │   PostToolUse  → 事件轨迹 + 滚动 MEMORY + reflection 提示       │
-   │   PreCompact   → transcript 备份 + 状态落盘                    │
-   │   Stop         → completion gate + checkpoint                 │
-   │   SubagentStop → 捕获 evaluator 的 PASS/NEEDS_WORK 裁决        │
-   └─────────────┬───────────────────────────────────────────────┘
-                 │ 调用
-                 ▼
-   ┌─────────────────────────────────────────────────────────────┐
-   │  lhx 原语  (config, state, memory, checkpoint,               │
-   │            loop_guard, reflection, drift)                    │
-   └─────────────┬───────────────────────────────────────────────┘
-                 │ 读/写（契约用原子写；日志用 append）
-                 ▼
-   ┌─────────────────────────────────────────────────────────────┐
-   │  磁盘状态  （在 compaction、重启、进程被杀后依然存活）          │
-   │   PROGRESS.md · feature_list.json · BRIEF.md · MEMORY.md     │
-   │   .lh/events.jsonl · .lh/checkpoint.json · git 历史           │
-   └─────────────────────────────────────────────────────────────┘
+ Claude Code / Agent SDK   （agent harness —— A/B 中保持固定）
+        │  生命周期 hooks（stdin JSON → stdout JSON）
+        ▼
+ lhx/hooks/*  薄适配层：SessionStart(注入resume) · PreToolUse(kill/steer/doom/budget)
+              PostToolUse(事件轨迹+MEMORY+reflection) · PreCompact(备份) · Stop(gate+checkpoint)
+              SubagentStop(evaluator 裁决)
+        ▼ 调用
+ lhx 原语 (config/state/memory/checkpoint/loop_guard/reflection/drift)
+        ▼ 读写（契约原子写；日志 append）
+ 磁盘状态: PROGRESS.md · feature_list.json · BRIEF.md · MEMORY.md · .lh/{events,checkpoint}.json · git
 ```
 
-控制循环是 **build → evaluate → rebuild**：一个 coding 会话完成一个特性、产出证据，
-fresh-context evaluator 独立验证它；裁决为 `NEEDS_WORK` 时其结论作为下一会话的起点。
-状态存放在磁盘上，因此一次 compaction 边界或一次进程被杀都不会丢失目标。
+控制循环 **build → evaluate → rebuild**：会话做一个特性、产出证据，evaluator 独立验证，
+`NEEDS_WORK` 时其结论作为下一会话起点。状态在磁盘上，故 compaction 或进程被杀都不丢目标。
+接线见 [claude_config/settings.json](claude_config/settings.json)；`LHX_*` 环境变量按 trial
+覆盖，`LHX_ENABLED=false` 即用同一份文件的 OFF arm。
+
+> 一个真实集成坑：Claude Code 2.x **默认不加载** project 作用域的 hooks，必须
+> 显式 `--setting-sources project`，否则模块完全 inert（详见 §5.8）。
 
 ---
 
-## 7. 集成面（Integration surface）
+## 5. 评估方法论
 
-| Hook 事件 | 为什么用这个事件 | 机制 |
-|---|---|---|
-| **SessionStart** | resume 时会重跑（`source="resume"`）；其输出会注入上下文——是放置时效性状态的正确位置。 | `additionalContext` 注入 resume 块。 |
-| **PreToolUse** | 能在调用执行前拒绝它；是阻断 loop / kill-switch 的唯一位置。 | `{"decision":"block","reason":...}`。 |
-| **PostToolUse** | 每次 tool 调用触发一次——天然计数器，用于 loop 签名、滚动 MEMORY、reflection 节奏。 | 追加 `.lh/events.jsonl`；更新 `MEMORY.md`；注入 reflection。 |
-| **PreCompact** | 在 summarization 可能丢失细节之前的最后机会。 | 备份 transcript（用 event 路径，附磁盘 fallback）；落盘状态；ledger 标记。 |
-| **Stop** | 用机器可校验的条件把守"我做完了"的判断。 | 契约未通过 / 预算未尽 / 未叫停前阻断；之后 checkpoint。 |
-| **SubagentStop** | 为下一会话捕获 evaluator 的裁决。 | 解析 `PASS`/`NEEDS_WORK`。 |
+### 5.1 实验设计：受控配对 A/B
+自变量：long-horizon 模块（ON vs OFF），或经 per-primitive 开关单独消融某方法。固定：
+模型/backend、任务集、agent harness、种子。对每个 `(task, seed)` 用**同一个种子**跑**两个
+arm**，配对内方差相互抵消（paired design）；每任务 `k` 个种子。实现见
+[lhxeval/runner.py](lhxeval/runner.py)。一次 trial 的流水线：`backend.run() → RunOutcome →
+grade() → TrialResult → 聚合 → 统计 → dashboard`。
 
-接线位于 [claude_config/settings.json](claude_config/settings.json)（project 作用域；
-每个 trial 用 `LHX_*` 环境变量覆盖；`LHX_ENABLED=false` 就是用**同一份文件**的 OFF arm）。
-Hooks 通过 shell 调用 `python -m lhx.hooks.*`。Headless / SDK 等价物（`query()` + 进程内
-回调 + `max_budget_usd` + `session_id`/`resume`）由
-[lhxeval/backends.py](lhxeval/backends.py) 的 `ClaudeAgentSDKBackend` 落地。
+### 5.2 评估模式
+"评估"不是一个开关，而是几条**正交的轴**。把它们显式拆开，是为了让每个数字都能说清"这是
+用哪种 backend、哪种 grader、哪种指标得到的"。
+
+| 轴 | 模式 | 含义 / 何时用 | 代价 |
+|---|---|---|---|
+| **Backend**（被测体怎么"跑"）| **simulated** | 以已知概率建模失效模式，**验证评估器本身**；产出 token 即 artifact | 离线、确定性、零成本，但**不反映真实能力** |
+| | **real（CLI / SDK）** | 真实 Claude 在隔离沙箱里跑、hooks 真跑 | 需 key、计费、非确定性 |
+| **Grader**（怎么判成功）| **确定性 token / 状态检查** | 检查 artifact 含必需 token（sim 用）；快、客观 | 仅对结构化 artifact 有意义 |
+| | **可执行 F2P/P2P** | 对**产出工作区**跑真实测试，按退出码判（real 用，§5.9） | 需把任务规格收紧到可机器验证 |
+| | **model-judge（LLM rubric）** | 主观/开放式产出；成对或带参考打分 | 需校准、自身有方差 |
+| | ~~自报（self-report）~~ | 信任 agent 写回 `feature_list.json` 的声明 | **反模式，明确拒绝**——可被 reward-hack |
+| **Metric**（怎么聚合）| **pass@1 / pass@k** | 能力：k 次中至少一次成功；随 k 上升、"指数级宽容" | 会把走运排在可靠之上 |
+| | **pass^k** | 可靠性：k 次全过；随 k 下降 | 单个不稳定 grader 即塌缩 |
+| | **capability vs regression** | 前者起点低（要爬的山），后者≈100%（警戒线） | regression 抓回退 |
+
+**贯穿原则（Anthropic *Demystifying evals*）：** 按**结果**而非路径评分；确定性 grader 优先，
+pass^k 只在 grader 确定后才可信；先有参考解证明可解；读 transcript。本方案的两条 backend
+正是"先校准尺子（simulated），再量真实对象（real）"的两层。
+
+### 5.3 任务集
+当前 11 个合成任务（[scripts/seed_tasks.py](scripts/seed_tasks.py) 生成并校验）：**capability**
+子集（多文件构建、refactor/迁移链、CLI、ETL、bug 扫除，跨 compaction 边界且/或被中断）；
+**regression** 子集（短、干净，两臂≈100%，抓回退）；以及 **executable-verified** 任务
+（`v01-slugify-verified`、`v02-health-endpoint-verified`，带 `verify` 可执行检查，§5.9）。每个
+任务带参考解（证明可解）；schema 见 [lhxeval/tasks/schema.py](lhxeval/tasks/schema.py)。
+
+### 5.4 指标（[lhxeval/metrics.py](lhxeval/metrics.py)）
+全部**按任务**计算后 macro 平均：**pass@1**、**pass@k 曲线**（`1−C(n−c,k)/C(n,k)`, Chen et
+al.）、**pass^k 曲线**与头条 **pass^3**（`C(c,k)/C(n,k)`；头条 k 取中等值 3，因 pass^n 会
+塌缩成全有/全无）；以及 long-horizon 专属的 **compaction 存活率 / 中断后 resume 成功率 /
+目标漂移率 / doom-loop 频次**，外加平均 steps·tokens·cost。
+
+### 5.5 方差与显著性（[lhxeval/stats.py](lhxeval/stats.py)）
+**配对 bootstrap CI**（对 pair 重采样）、**McNemar 精确检验**（配对二元结果，报
+helped/hurt/discordant + 精确双侧 p）、**Beta 后验**（Jeffreys 先验，小 n/小 k 下给诚实
+区间）。全部纯 Python、精确（无正态近似），零 scipy 依赖。
+
+### 5.6 Harness 卫生（[lhxeval/sandbox.py](lhxeval/sandbox.py)）
+每 trial 在**全新临时工作区**运行（`task.id` 经消毒防路径逃逸），预置不可变 brief +
+default-FAIL 契约，事后销毁——**无跨 trial 的文件或 git 历史泄漏**（Anthropic 观察到 agent
+会读上一 trial 的 git 历史获利）。种子显式且记录；保留完整事件轨迹。
+
+### 5.7 对有效性的威胁
+任务歧义、grader 被绕过/reward-hack、环境不稳定、饱和、模型非确定性。缓解：参考解 sanity
+check、"0% 通过率多半是任务坏了"、平衡的 capability/regression、确定性优先、读 transcript。
+背景：连 **SWE-bench Verified 都在 2026-02 被弃用**（测试缺陷/污染），更说明参考解纪律与
+抗污染的重要。
+
+### 5.8 验证评估器自身（meta-eval）
+在相信任何数字前做的事——这是评估工程最该被考核的部分：
+1. **参考解 sanity check**（`lhx-eval validate`）：每任务参考解须评 `success=True` *且*空产出
+   须评 `success=False`，否则任务损坏。
+2. **已知 ground-truth 的仿真 backend**（[lhxeval/backends.py](lhxeval/backends.py)）：以显式
+   概率建模 M2–M7，并把每个缓解**挂钩在真实 `lhx.Config` 开关上**，故翻转 `enabled` 的行为
+   与真正部署一致；regression 子集是阴性对照（两臂≈100%，确认无误报）。
+3. **两个被这套自检抓出来的真实 bug：**
+   - *漂移假阳性*：首跑 ON 报 66.7% 漂移——是 keyword-drift 在合成 token 袋上误报。修复：
+     ground-truth 漂移来自 backend，关键词启发式只用于真实散文。
+   - *模块静默失效*：真实 CLI 首跑 `success=True` 却 0 事件——`LHX_CONFIG` 被塞成 JSON 串触发
+     `OSError: File name too long`，**每个 hook 静默崩溃**，模块全程 inert，"成功"全靠 agent
+     自报。修复：`from_env` 防御性解析 + 配置落文件；并发现需 `--setting-sources project`。
+     这正是"评估在静默地测量虚无"的典型——只因 smoke 检查事件轨迹（而非只看 pass/fail）才被
+     发现。
+4. **数学单测**（[tests/](tests/)，43 项）：pass@k 对齐 Chen 闭式；∀`(n,c,k)` 有
+   `pass@k ≥ pass^k`；McNemar 计数/精确 p；零假设下 bootstrap 覆盖 0；仿真**跨进程**确定。
+
+### 5.9 真实 A/B：可执行验证
+要得到**可信的真实指标**而非"自报"，任务携带 `verify`——一组对**产出工作区**执行的检查
+（F2P/P2P，退出码 0 即通过）。`grade()`（[lhxeval/graders.py](lhxeval/graders.py)）在检查
+存在时按检查评分，否则回落到 token grader。两个 executable-verified 任务：
+- `v01-slugify-verified`：实现 `slugify.py`，检查 `python3 -c "from slugify import slugify;
+  assert slugify('Hello, World!')=='hello-world'"`（跑产出代码，不是 agent 的声明）。
+- `v02-health-endpoint-verified`：stdlib HTTP server，检查**真的启动服务器并探测**
+  `GET :8765/health → 200 'ok'`。
+
+**这是一个真实的、可跑的 eval 模式**，复用同一条 A/B 流水线：
+```bash
+lhx-eval run --backend sdk --verified-only -k 1   # 仅 verified 任务，真实 claude -p，executable 评分
+```
+实测一次（2 任务 × ON/OFF × k=1 = 4 trial，Haiku，总计约 $0.20）：四个 trial 全部由
+**executable-checks** 判 `success=True`；ON 臂 hooks 实际触发（8–16 工具事件/任务），OFF 臂
+inert（0 事件）。**pass@1 ON 1.0 vs OFF 1.0（Δ=0）**——这是正确的**阴性对照**：短任务上模块
+本就不应改变一次性成功率，与仿真里 regression 子集两臂≈100% 的预期一致。（drift 等 prose 启发式
+在 executable 任务上不参与评分——见 [runner.py](lhxeval/runner.py) 的门控。）
+
+> 这就是"评估真实表现"的正确形态（Anthropic 路线）：跑真实 agent、用**可执行测试**判真实
+> 产出；仿真层只是先确保这把尺子准的脚手架。要在长程能力上看出 ON/OFF 差异，需要把可验证
+> 任务集扩充到会真正触发 M1–M7 的长程任务（§7）。
 
 ---
 
-## 8. 评估方法论（重心）
+## 6. 结果与 dashboard
+`scripts/run_eval.sh` 产出 `runs/latest/results.json` 与自包含 `dashboard.html`（无 JS/CDN，
+HTML 抽到 `string.Template`）：per-arm 表、配对差值 + CI、McNemar、pass@k vs pass^k 曲线。
+在仿真里失效模式被建模为**直接致任务失败**，故 pass@1 也被大幅拉动；真实模型上更可能的签名
+是"raw pass@1 差异不大、增益集中在可靠性 pass^k 与 long-horizon 专属指标"——届时 pass@1
+近零差、long-horizon 指标大差，**不是**零结果，正是模块在干它该干的事。
 
-### 8.1 实验设计
-一个**受控的配对 A/B**。自变量：long-horizon 模块（ON vs OFF）——或经由 per-primitive
-开关，单独消融某一个方法。固定：模型/backend、任务集、agent harness、种子。对每个
-`(task, seed)`，用**同一个种子**跑**两个 arm**，使配对内方差相互抵消（配对设计）。每个
-任务 `k` 个种子。实现见 [lhxeval/runner.py](lhxeval/runner.py)。
+## 7. 局限与未来工作
+- **规模化真实 A/B：** 真实 Agent-SDK A/B 已在 verified 任务上跑通（§5.9，小规模阴性对照）；
+  下一步是把 executable-verified 任务集扩到会真正触发 M1–M7 的**长程**任务（多会话、强制
+  compaction、真实中断），并在 Haiku/Sonnet 上跑 k≥5，得到真实的 pass^k / 成本曲线——届时
+  才可能看出 ON/OFF 的长程差异。组件（backend、可执行 grader、统计）已就绪。
+- 扩充 executable-verified 任务集（目前 2 个）至 Terminal-Bench / SWE-bench 量级；引入
+  **model-judge** grader 处理开放式产出。
+- **隔离**：检查目前跑在临时目录（信任代码可以；任意 agent 产出应上 Docker/Harbor；服务器
+  探测任务还需端口隔离才能并行）。
+- 补回 cwc 的 `verify-gate` 硬写入门作纵深防御；CLI 成本解析已做（`--output-format json`）。
+- 跟踪"重新简化节奏"：每次模型升级重检哪些护栏仍值得保留。
 
-### 8.2 任务集
-当前 9 个合成任务（可平凡扩展；方法论建议 20–50 个来自真实失败的任务），由
-[scripts/seed_tasks.py](scripts/seed_tasks.py) 生成并校验：一个 **capability** 子集
-（多文件构建、refactor 链、迁移链、CLI、ETL、bug 扫除），会跨越 compaction 边界且/或被
-中断；一个 **regression** 子集（短、干净），两个 arm 都应约 100%，用于**抓回退**。每个
-任务带**参考解描述**（证明可解）与 per-feature `requires` token（使 graders 非平凡）。
-任务为 JSON，schema 见 [lhxeval/tasks/schema.py](lhxeval/tasks/schema.py)。
+## 8. 安全
+最小权限 `allowedTools`（evaluator 无写工具）；kill-switch（`AGENT_STOP`）+ steering
+（`STEER.md`）；completion gate 提供 human-in-the-loop；隔离沙箱；`max_budget_usd` +
+step-budget 熔断的成本上限；完整 transcript 审计；真实运行用 `--permission-mode
+bypassPermissions` 仅限一次性沙箱。
 
-### 8.3 Graders
-确定性优先（[lhxeval/graders.py](lhxeval/graders.py)）：对每个特性检查产出 artifact 是否
-含其全部 `requires` token（outcome / fail-to-pass 检查），给出按权重的**部分得分**；成功
-= 所有特性满足。**按结果评分，而非路径**。基于模型的 rubric grader 作为校准钩子留在默认
-路径之外。Capability 起点低（要爬的山），regression 接近 100%（警戒线），前者饱和后
-"毕业"进入后者。
-
-### 8.4 指标（[lhxeval/metrics.py](lhxeval/metrics.py)）
-全部**按任务**计算后再 macro 平均（不混淆任务难度）：**pass@1** 与 **pass@k 曲线**
-（`1 − C(n−c,k)/C(n,k)`, Chen et al.）；**pass^k 曲线**与头条 **pass^3**
-（`C(c,k)/C(n,k)`，头条 k 取中等值 3，因为 pass^n 会塌缩成全有/全无而失去区分度）；
-**compaction 存活率 / 中断后 resume 成功率 / 目标漂移率 / doom-loop 频次**（这四项正是
-§5.3-2 强调的 long-horizon 专属指标），外加 **平均 steps·tokens·cost** 三个效率量。
-
-### 8.5 方差与显著性（[lhxeval/stats.py](lhxeval/stats.py)）
-**配对 bootstrap CI**（对 pair 重采样）、**McNemar 精确检验**（配对二元结果的正确检验，
-报告 helped/hurt/discordant + 精确双侧 p）、**Beta 后验**（Jeffreys 先验，小 n/小 k 下给
-诚实区间）。全部纯 Python 且精确。**告诫：** pass@k "指数级宽容"，可能把走运的 agent 排在
-可靠的之上；pass^k 是可靠性指标但会因单个不稳定 grader 而塌缩——所以信任 pass^k 之前
-graders 必须确定性。
-
-### 8.6 Harness 卫生（[lhxeval/sandbox.py](lhxeval/sandbox.py)）
-每个 trial 在**全新临时工作区**中运行（`task.id` 经正则消毒，防路径逃逸），预置不可变
-brief 与 default-FAIL 契约，之后销毁——**无跨 trial 的文件或 git 历史泄漏**（Anthropic
-观察到 agent 会读上一 trial 的 git 历史获得不公平优势）。种子显式且记录；保留完整事件轨迹。
-
-### 8.7 对有效性的威胁
-任务歧义、grader 被绕过 / reward-hacking、环境不稳定、饱和、模型非确定性。缓解：参考解
-sanity check、"0% 通过率通常是任务坏了"、平衡的 capability/regression 集、确定性 graders、
-读 transcript。背景：连 **SWE-bench Verified 都在 2026-02 被弃用**（测试缺陷/污染）——
-更说明坚持参考解纪律与抗污染的重要性。
-
-### 8.8 我如何验证评估本身
-在信任任何头条数字之前做了四件事：
-1. **参考解 sanity check**（`lhx-eval validate`）：每个任务参考解必须评 `success=True`
-   *且*空产出必须评 `success=False`；任一不满足即任务损坏。
-2. **具有已知 ground-truth 的 simulated backend**（[lhxeval/backends.py](lhxeval/backends.py)）：
-   以显式概率建模 M2–M7 各失败模式，并把每个缓解措施挂钩在**真实的** `lhx.Config` 开关上
-   ——于是翻转 `enabled` 的行为与真正部署一致，可检验 harness *是否检测到应检测的效应*。
-   regression 子集是阴性对照（两 arm 约 100%）。
-3. **一个被我抓到并修掉的 grader 真实性 bug：** 首次运行 ON arm 报 66.7% 漂移率；查明是
-   keyword-drift 在合成 token 袋产物上误报。修复：ground-truth 漂移来自 backend，关键词
-   启发式只用于真实散文产物。这正是方法论警告的"评估会骗你自己"。
-4. **针对数学的单元测试**（[tests/](tests/)）：pass@k 与 Chen 闭式一致；对所有 `(n,c,k)`
-   有 `pass@k ≥ pass^k`；McNemar 计数与精确 p；零假设下 bootstrap 覆盖 0；仿真**跨进程**
-   确定（修掉了一个 `PYTHONHASHSEED` 盐值泄漏进 RNG 种子的 bug）。
-
----
-
-## 9. 结果与 dashboard
-
-`scripts/run_eval.sh` 产出 `runs/latest/results.json` 与自包含的
-`runs/latest/dashboard.html`（无 JS/CDN 依赖；HTML 抽到 `string.Template` 模板文件），
-展示 per-arm 表格、配对差值 + CI、McNemar 裁决、以及 **pass@k vs pass^k 曲线**。
-
-在本仿真里，失败模式被建模为**直接导致任务失败**（compaction 丢目标、冷重启丢进度），
-所以 pass@1 也被大幅拉动（+51pp）。但在**真实模型**上更可能出现的签名是：raw pass@1
-差异不大、增益主要落在**可靠性（pass^k）与 long-horizon 专属指标**上——因为模块改变的
-是"长跑能不能稳住"，而非"单步能力"。届时一个 pass@1 差值近零、但 long-horizon 指标差值
-很大的结果，**并不是**零结果——那恰恰是模块在干它该干的事，也正是我们专门隔离这些指标
-的原因。
-
----
-
-## 10. 局限与未来工作
-- 3 天的合成任务集可能无法反映真实难度；应加入 Terminal-Bench / SWE-bench 风格真实任务。
-- 在 Haiku/Sonnet 上跑通在线 A/B（token/cost 解析是剩余 `TODO`；harness 已模型无关）。
-- 补回 cwc 的 `verify-gate` 硬写入门作为纵深防御（§5.3-6）。
-- 加入 planner/builder/evaluator 三 agent 架构；浏览器验证的 evaluator；Bayesian 评估；
-  更大、更平衡的任务库。
-- 跟踪**重新简化的节奏**：每次模型升级时重检验哪些护栏还值得保留。
-
-## 11. 安全
-最小权限 `allowedTools`（evaluator 无写工具）；操作员 **kill-switch**（`AGENT_STOP`）与
-**steering**（`STEER.md`）；completion gate 提供 human-in-the-loop；**隔离沙箱**；
-`max_budget_usd` + step-budget 熔断的成本上限；完整 transcript 审计轨迹。
-
-## 12. 附录 —— 复现
+## 9. 附录 —— 复现
 ```bash
 pip install -e .
 python scripts/seed_tasks.py          # 生成 + 校验任务集
 lhx-eval validate                     # 参考解 sanity check
-lhx-eval run -k 10                    # 配对 A/B → runs/latest/dashboard.html
-pytest -q                             # 37 个单元/集成测试
-scripts/install.sh /path/to/project   # 把模块投放到真实项目
+lhx-eval run -k 10                    # 仿真配对 A/B → runs/latest/dashboard.html
+pytest -q                             # 43 个单元/集成测试
+# 真实 Claude（需 .env 里的 ANTHROPIC_API_KEY）：
+cp .env.template .env
+python scripts/smoke_sdk.py v01-slugify-verified   # 真实运行 + 可执行验证
 ```
 Hook JSON I/O、任务 schema、`LHX_*` 环境变量分别在 `lhx/hooks/_io.py`、
-`lhxeval/tasks/schema.py`、`lhx/config.py` 中就地注释说明。
+`lhxeval/tasks/schema.py`、`lhx/config.py` 就地注释。

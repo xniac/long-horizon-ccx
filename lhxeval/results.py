@@ -34,6 +34,7 @@ class TrialResult:
 
     def to_dict(self) -> dict:
         d = asdict(self)
-        # transcripts are bulky; keep a length, not the full trail, in summaries
+        # Transcripts are bulky; record a count, not the full trail, in results.json.
         d["n_events"] = len(self.transcript)
+        d.pop("transcript", None)
         return d
