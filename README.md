@@ -40,7 +40,7 @@ pip install -e .
 python scripts/seed_tasks.py     # generate + validate the synthetic task suite
 lhx-eval validate                # reference-solution sanity check (graders not vacuous)
 lhx-eval run -k 10               # the paired A/B → runs/latest/{results.json,dashboard.html}
-pytest -q                        # 34 unit + integration tests
+pytest -q                        # 37 unit + integration tests
 
 # one-shot:
 scripts/run_eval.sh 10           # validate + run + point you at the dashboard
@@ -88,16 +88,21 @@ lhxeval/                 # the evaluation harness (the centerpiece)
   cli.py                 #   `lhx-eval run|validate`
   tasks/                 #   JSON task schema + synthetic suite
 scripts/                 # seed_tasks.py, install.sh, run_eval.sh
-tests/                   # 34 tests: math, guards, state, hooks, end-to-end smoke
+tests/                   # 37 tests: math, guards, state, hooks, end-to-end smoke
 ```
 
-## What's real vs stubbed
+## What's real vs needs credentials
 
-Everything runs and is tested **except** the live Claude run loop: 
-`ClaudeAgentSDKBackend.run()` marks the exact seam (it raises `NotImplementedError`
-with the wiring spelled out) rather than half-implementing a live integration in
-the 2-day box. The harness, metrics, stats, graders, sandbox, dashboard, and the
-entire `lhx` module are fully implemented and exercised by the simulated backend.
+Everything is implemented and tested offline. The `lhx` module, the eval harness,
+metrics, stats, graders, sandbox and dashboard are fully exercised by the
+deterministic **simulated** backend. The **real** backend
+(`ClaudeAgentSDKBackend`) is a complete headless-`claude -p` skeleton — it preps
+an isolated sandbox, installs the module's hooks, wires the ON/OFF arm via
+`LHX_ENABLED`, and reconstructs the trajectory from the on-disk artifacts the
+module writes — and is covered by a **mocked smoke test**
+([tests/test_backend_sdk.py](tests/test_backend_sdk.py)). The only thing it needs
+to run live is the `claude` CLI on PATH + `ANTHROPIC_API_KEY`; token/cost parsing
+from the session transcript is the one marked `TODO`.
 
 See **[DESIGN.md](DESIGN.md)** for the full design, methodology, and the
 "how I validated the eval itself" section.

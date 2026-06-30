@@ -125,12 +125,18 @@ class ProgressLedger:
         atomic_write(self.progress_path, header)
 
     def append(self, line: str) -> None:
-        existing = (
-            self.progress_path.read_text(encoding="utf-8")
-            if self.progress_path.exists()
-            else "# Progress Log\n\n## Session log\n\n"
-        )
-        atomic_write(self.progress_path, existing.rstrip() + f"\n- {_now()} — {line}\n")
+        # Append-only: O(1) per call. Atomicity is not critical here (worst case
+        # a torn trailing line), and rewriting the whole file every call would be
+        # O(n^2) over a long session — the Claude-plays-Pokemon pattern is
+        # thousands of steps. init() is the only writer that uses atomic_write.
+        self.progress_path.parent.mkdir(parents=True, exist_ok=True)
+        new_file = not self.progress_path.exists()
+        with open(self.progress_path, "a", encoding="utf-8") as f:
+            if new_file:
+                f.write("# Progress Log\n\n## Session log\n\n")
+            f.write(f"- {_now()} — {line}\n")
+            f.flush()
+            os.fsync(f.fileno())
 
     def record_event(self, event: dict) -> None:
         event = {"ts": _now(), **event}

@@ -29,6 +29,9 @@ lhx-eval = "lhxeval.cli:main"
 [tool.setuptools]
 packages = ["lhx", "lhx.hooks", "lhxeval", "lhxeval.tasks"]
 
+[tool.setuptools.package-data]
+lhxeval = ["dashboard.html", "tasks/synthetic/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

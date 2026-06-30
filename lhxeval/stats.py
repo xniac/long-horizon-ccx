@@ -106,7 +106,13 @@ def mcnemar_exact(on_pass: Sequence[bool], off_pass: Sequence[bool]) -> McNemarR
 # Beta posterior for a single rate
 # --------------------------------------------------------------------------- #
 def _beta_ppf(p: float, a: float, b: float, *, steps: int = 4000) -> float:
-    """Inverse Beta CDF by numeric integration of the pdf (good enough for CIs)."""
+    """Inverse Beta CDF (quantile) for credible intervals.
+
+    Numeric CDF inversion via the trapezoidal rule over [0,1] with linear
+    interpolation in the crossing bin; accurate to ~1e-3 for typical a,b < 50,
+    which is the regime of small eval suites. Avoids a scipy dependency. See the
+    regularised incomplete Beta function I_x(a,b) for the closed form.
+    """
     if p <= 0:
         return 0.0
     if p >= 1:

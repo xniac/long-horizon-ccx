@@ -16,6 +16,18 @@ from pathlib import Path
 from ._io import allow, build_runtime, read_event
 
 
+def _discover_transcript() -> str | None:
+    """Best-effort fallback when the event lacks transcript_path."""
+    candidates = [
+        Path.home() / ".claude" / "current-session.jsonl",
+        Path.home() / ".claude" / "projects" / "session.jsonl",
+    ]
+    for p in candidates:
+        if p.is_file():
+            return str(p)
+    return None
+
+
 def main() -> int:
     event = read_event()
     rt = build_runtime(event)
@@ -23,7 +35,10 @@ def main() -> int:
         allow()
         return 0
 
-    transcript = event.get("transcript_path")
+    # The hook event carries the authoritative transcript path; prefer it. Fall
+    # back to known on-disk locations only if the event omits it (the path has
+    # moved across Claude Code versions, so we probe rather than hardcode one).
+    transcript = event.get("transcript_path") or _discover_transcript()
     if transcript and Path(transcript).is_file():
         backups = rt.cwd / rt.config.state_dir / "transcripts"
         backups.mkdir(parents=True, exist_ok=True)

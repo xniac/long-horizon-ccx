@@ -86,6 +86,15 @@ def test_post_tool_use_reflection_nudge(tmp_path, monkeypatch):
     assert "REFLECTION CHECKPOINT" in ctx
 
 
+def test_post_tool_use_updates_rolling_memory(tmp_path, monkeypatch):
+    event = seed_workspace(tmp_path)
+    event["tool_name"] = "Write"
+    event["tool_input"] = {"file_path": "src/app.py"}
+    run_hook(post_tool_use.main, event, monkeypatch)
+    mem = (tmp_path / "MEMORY.md").read_text()
+    assert "[Write] src/app.py" in mem  # the note() call is actually wired in
+
+
 def test_stop_completion_gate_blocks_until_all_pass(tmp_path, monkeypatch):
     event = seed_workspace(tmp_path, n_features=2, passing=1)
     out = run_hook(stop.main, event, monkeypatch)

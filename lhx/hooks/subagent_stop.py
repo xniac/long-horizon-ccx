@@ -10,6 +10,7 @@ findings on ``NEEDS_WORK``.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -39,12 +40,19 @@ def _last_text_from_transcript(path: str | None) -> str:
 
 
 def parse_verdict(text: str) -> str | None:
-    first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
-    upper = first.upper()
-    if upper.startswith("PASS"):
-        return "PASS"
-    if upper.startswith("NEEDS_WORK"):
-        return "NEEDS_WORK"
+    """Find the PASS / NEEDS_WORK verdict.
+
+    The contract asks for it on the first line, but LLM output isn't 100%
+    controllable (e.g. a "Based on my review:" preamble), so we scan the first
+    few non-empty lines and match on a word boundary (NEEDS_WORK is checked
+    first so it isn't shadowed, and 'PASSED' won't false-match 'PASS').
+    """
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    for line in lines[:5]:
+        if re.match(r"^NEEDS_WORK\b", line, re.IGNORECASE):
+            return "NEEDS_WORK"
+        if re.match(r"^PASS\b", line, re.IGNORECASE):
+            return "PASS"
     return None
 
 

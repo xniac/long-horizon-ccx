@@ -46,6 +46,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     tasks = load_suite(Path(args.tasks))
     if args.difficulty:
         tasks = [t for t in tasks if t.difficulty == args.difficulty]
+    if not tasks:
+        print(
+            f"WARNING: no tasks match difficulty filter "
+            f"'{args.difficulty}' in {args.tasks}. Nothing to run.",
+            file=sys.stderr,
+        )
+        return 1
     backend = get_backend(args.backend)
     print(f"Running A/B: {len(tasks)} tasks x k={args.k} x 2 arms "
           f"= {len(tasks) * args.k * 2} trials (backend={backend.name})")

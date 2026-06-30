@@ -27,6 +27,18 @@ def main() -> int:
     sig = tool_signature(tool_name, tool_input)
     rt.ledger.record_event({"type": "tool_use", "tool": tool_name, "sig": sig})
 
+    # Rolling, constant-size memory (Codex pattern): record a one-line summary of
+    # mutating actions to the capped MEMORY.md, so the essential "what changed"
+    # survives a compaction even when PROGRESS.md has grown long.
+    if tool_name in ("Write", "Edit", "Bash"):
+        target = (
+            tool_input.get("file_path")
+            or tool_input.get("command")
+            or tool_input.get("path")
+            or ""
+        )
+        rt.memory.note(f"[{tool_name}] {str(target)[:80]}")
+
     if rt.config.reflection:
         count = rt.tool_call_count()
         if should_reflect(count, rt.config.reflection_interval):

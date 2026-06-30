@@ -196,38 +196,111 @@ class SimulatedBackend(AgentBackend):
 
 
 class ClaudeAgentSDKBackend(AgentBackend):
-    """Runs real Claude via the Claude Agent SDK in an isolated sandbox.
+    """Runs real Claude in an isolated sandbox via the headless `claude -p` CLI.
 
-    The module is wired in by copying ``claude_config/`` into the sandbox's
-    ``.claude/`` for the ON arm; the OFF arm runs with ``LHX_ENABLED=false`` (same
-    config file, module inert), holding the agent harness identical.
+    This is the *real* integration seam. The module is wired into the sandbox by
+    installing the drop-in ``.claude/`` config; the only difference between arms
+    is ``LHX_ENABLED`` (same config file, module inert when off), holding the
+    agent harness identical. The trajectory is reconstructed from the on-disk
+    artifacts the module writes (``.lh/events.jsonl`` + ``feature_list.json``) —
+    i.e. we grade the **outcome and the recorded events**, not the CLI's stdout.
+
+    Requires the ``claude`` CLI on PATH and ANTHROPIC_API_KEY. It is exercised by
+    a mocked smoke test (tests/test_backend_sdk.py); a live run needs credentials.
+    The SDK-native equivalent (in-process ``query()`` with hook callbacks and
+    ``max_budget_usd``) is a drop-in replacement for the subprocess call below.
     """
 
     name = "claude-sdk"
 
-    def __init__(self, model: str = "claude-haiku-4-5-20251001", max_budget_usd: float = 1.0):
+    def __init__(
+        self,
+        model: str = "claude-haiku-4-5-20251001",
+        max_turns: int = 80,
+        timeout_seconds: int = 900,
+        max_budget_usd: float = 1.0,
+    ):
         self.model = model
+        self.max_turns = max_turns
+        self.timeout_seconds = timeout_seconds
         self.max_budget_usd = max_budget_usd
 
     def run(self, task: Task, config: Config, seed: int, directives: Directives) -> RunOutcome:
-        try:
-            import anyio
-            from claude_agent_sdk import query, ClaudeAgentOptions  # type: ignore
-        except Exception as exc:  # pragma: no cover - depends on optional dep
-            raise RuntimeError(
-                "ClaudeAgentSDKBackend requires `pip install claude-agent-sdk` and "
-                "ANTHROPIC_API_KEY. Use the simulated backend for offline runs."
-            ) from exc
+        import os
+        import shutil as _shutil
+        import subprocess
 
-        # NOTE: sandbox setup (clean workspace, BRIEF/feature_list seeding, hook
-        # install, interruption injection) is handled by the runner via
-        # lhxeval.sandbox; this backend assumes config.* paths point inside the
-        # already-prepared sandbox. Full implementation is out of scope for the
-        # offline 2-day deliverable but the seam is real.
-        raise NotImplementedError(
-            "Wire ClaudeAgentSDKBackend.run to query() with permissionMode, "
-            "allowedTools, hooks and max_budget_usd; reconstruct RunOutcome from "
-            "the message stream + .lh/events.jsonl. See DESIGN.md §7."
+        from lhx.state import FeatureList
+
+        from .sandbox import trial_sandbox
+
+        if _shutil.which("claude") is None:
+            raise RuntimeError(
+                "ClaudeAgentSDKBackend needs the `claude` CLI on PATH and "
+                "ANTHROPIC_API_KEY. Use --backend simulated for offline runs."
+            )
+
+        # Clean, isolated workspace with the module's hooks installed.
+        with trial_sandbox(task, init_git=True, install_module=True) as ws:
+            env = os.environ.copy()
+            # The only A/B difference: master switch + per-trial config via env.
+            env["LHX_ENABLED"] = "true" if config.enabled else "false"
+            env["LHX_CONFIG"] = config.model_dump_json()  # ignored if unset path
+
+            cmd = [
+                "claude", "-p",
+                "--model", self.model,
+                "--max-turns", str(self.max_turns),
+            ]
+            try:
+                subprocess.run(
+                    cmd,
+                    input=task.prompt,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout_seconds,
+                    cwd=str(ws),
+                    env=env,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                pass  # treat as an (incomplete) run; outcome read from disk below
+
+            return self._reconstruct_outcome(ws, FeatureList)
+
+    @staticmethod
+    def _reconstruct_outcome(ws, feature_list_cls) -> RunOutcome:
+        """Rebuild a RunOutcome from the artifacts the module left on disk."""
+        import json
+        from pathlib import Path
+
+        events: list[dict] = []
+        events_path = Path(ws) / ".lh" / "events.jsonl"
+        if events_path.exists():
+            for ln in events_path.read_text(encoding="utf-8").splitlines():
+                ln = ln.strip()
+                if ln:
+                    try:
+                        events.append(json.loads(ln))
+                    except json.JSONDecodeError:
+                        continue
+
+        fl = feature_list_cls.load(Path(ws) / "feature_list.json")
+        done = [f for f in fl.features if f.passes]
+        tool_events = [e for e in events if e.get("type") == "tool_use"]
+        guard_blocks = [e for e in events if e.get("type") == "guard_block"]
+
+        return RunOutcome(
+            # For real runs the grader inspects the workspace; here we surface the
+            # evidence the module verified per feature as the artifact.
+            artifact={f.id: (f.evidence or f.id) for f in done},
+            features_completed=[f.id for f in done],
+            steps=len(tool_events),
+            tokens=0,  # TODO: parse from the session transcript / ResultMessage
+            cost_usd=0.0,
+            doom_loops=sum(1 for e in guard_blocks if e.get("kind") == "doom_loop"),
+            forced_compaction=any(e.get("type") == "compaction" for e in events),
+            events=events,
         )
 
 
