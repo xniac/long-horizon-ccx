@@ -26,9 +26,13 @@ class GradeResult:
 
 
 def grade(task: Task, outcome: RunOutcome) -> GradeResult:
-    """Pick the right grader. If the task has executable verify checks and they
-    were run (real backend), grade by them — the honest, outcome-based signal.
-    Otherwise fall back to the token grader (simulated backend)."""
+    """Pick the grader.
+
+    If the task has executable ``verify`` checks and they were run, those checks
+    are the **sole** success criterion — deliberately *not* blended with the token
+    grader, since mixing executable truth with token-matching would dilute the
+    real signal with noise. The token grader is only the fallback when no checks
+    ran (e.g. a task without ``verify``)."""
     if task.verify and outcome.checks:
         return grade_checks(task, outcome)
     return grade_outcome(task, outcome)

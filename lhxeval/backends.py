@@ -181,6 +181,11 @@ class SimulatedBackend(AgentBackend):
         out.steps = steps
         out.tokens = steps * sim.tokens_per_step
         out.cost_usd = out.tokens / 1000.0 * sim.usd_per_1k_tokens
+        # For verified tasks, fill checks so the SAME grader path (grade_checks)
+        # is exercised by both backends: model "all features done → checks pass".
+        if task.verify:
+            all_done = len(completed) == n_features
+            out.checks = {c.id: all_done for c in task.verify}
         return out
 
 
@@ -279,9 +284,16 @@ class ClaudeAgentSDKBackend(AgentBackend):
             return outcome
 
     def _run_checks(self, ws, checks, env) -> dict:
-        """Run each VerifyCheck.cmd in the workspace; exit 0 == passed."""
+        """Run each VerifyCheck.cmd in the workspace; exit 0 == passed.
+
+        Secrets are stripped from the check environment — verify commands come from
+        task definitions and have no business seeing API keys."""
         import subprocess
 
+        env = {
+            k: v for k, v in env.items()
+            if not k.startswith(("ANTHROPIC_", "OPENAI_", "AWS_", "GOOGLE_", "GEMINI_"))
+        }
         results: dict[str, bool] = {}
         for c in checks:
             try:

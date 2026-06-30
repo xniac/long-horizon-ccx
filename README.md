@@ -16,19 +16,19 @@ honest uncertainty.
 
 ## Headline result
 
-Simulated backend, 11 tasks × k=10 × 2 arms = 220 trials (`lhx-eval run -k 10`):
+Simulated backend, 12 tasks × k=10 × 2 arms = 240 trials (`lhx-eval run -k 10`):
 
 | metric | module ON | module OFF | Δ |
 |---|---|---|---|
-| pass@1 (macro) | **91.8%** | 50.0% | +41.8pp |
-| pass^3 (reliability) | **78.4%** | 45.5% | +32.9pp |
-| compaction-survival | **80.0%** | 2.5% | +77.5pp |
+| pass@1 (macro) | **91.7%** | 47.5% | +44.2pp |
+| pass^3 (reliability) | **77.7%** | 41.7% | +36.0pp |
+| compaction-survival | **82.0%** | 6.0% | +76.0pp |
 | resume-after-interruption | **93.3%** | 13.3% | +80.0pp |
-| goal-drift rate | **0.0%** | 50.0% | −50.0pp |
-| doom-loops / trial | **0.10** | 0.44 | −0.34 |
+| goal-drift rate | **0.0%** | 53.3% | −53.3pp |
+| doom-loops / trial | **0.09** | 0.46 | −0.37 |
 
-Paired success delta **+0.418 [+0.327, +0.509]** (95% bootstrap CI); McNemar
-exact **p ≈ 2.8e-14** (helped 46, hurt 0). ⚠️ This is a **harness-validation**
+Paired success delta **+0.442 [+0.350, +0.533]** (95% bootstrap CI); McNemar
+exact **p ≈ 2.2e-16** (helped 53, hurt 0). ⚠️ This is a **harness-validation**
 run, not a real-model capability claim: the numbers come from a *simulated* agent
 with known ground-truth effects, used to prove the harness **detects an effect it
 knows exists** (see DESIGN §5.8). For **real** metrics, the same harness runs
@@ -68,10 +68,11 @@ python scripts/smoke_sdk.py v02-health-endpoint-verified # starts the server & p
 # integration check on a self-report task (no executable verify):
 python scripts/smoke_sdk.py                 # default task r01-hello-endpoint
 
-# a REAL, executable-graded A/B over the verified tasks (ON vs OFF, ~$0.20):
-LHX_SDK_MAX_TURNS=25 lhx-eval run --backend sdk --verified-only -k 1
+# a REAL, executable-graded A/B over the 3 verified tasks (ON vs OFF, ~$0.33):
+LHX_SDK_MAX_TURNS=45 lhx-eval run --backend sdk --verified-only -k 1
 # → all trials graded by executable checks; ON fires hooks, OFF inert; Δ≈0 on
-#   these short tasks (a correct negative control — the module helps on long tasks).
+#   these tasks (a correct negative control — they one-shot, so the module can't
+#   help; real long-horizon divergence needs genuinely multi-session tasks).
 
 # the full paired A/B against real Claude over the whole suite:
 lhx-eval run -k 3 --backend sdk

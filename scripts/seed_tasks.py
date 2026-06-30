@@ -62,17 +62,19 @@ def task(
 
 
 # Server-probe verification: actually starts the produced app and hits it over
-# HTTP (the harder, more realistic real-grader mode). Pure stdlib (urllib), fixed
-# port, polls for startup, always kills the server. Exit 0 == endpoint works.
+# HTTP (the harder, more realistic real-grader mode). Pure stdlib (urllib); a
+# RANDOM high port passed via $PORT (so parallel trials don't collide); polls for
+# startup, always kills the server. Exit 0 == endpoint works.
 SERVER_PROBE = (
     "python3 - <<'PY'\n"
-    "import subprocess, sys, time, urllib.request\n"
-    "p = subprocess.Popen([sys.executable, 'app.py'])\n"
+    "import os, subprocess, sys, time, urllib.request, random\n"
+    "port = random.randint(49152, 65535)\n"
+    "p = subprocess.Popen([sys.executable, 'app.py'], env={**os.environ, 'PORT': str(port)})\n"
     "try:\n"
     "    for _ in range(20):\n"
     "        time.sleep(0.5)\n"
     "        try:\n"
-    "            r = urllib.request.urlopen('http://localhost:8765/health', timeout=1)\n"
+    "            r = urllib.request.urlopen(f'http://localhost:{port}/health', timeout=1)\n"
     "            if r.status == 200 and r.read().strip() == b'ok':\n"
     "                sys.exit(0)\n"
     "        except Exception:\n"
@@ -277,12 +279,54 @@ def build() -> list[dict]:
         "Implement a stdlib HTTP server with /health, verified by hitting it.",
         "Create `app.py` using ONLY the Python standard library (no third-party "
         "packages such as Flask). Running `python3 app.py` must start an HTTP "
-        "server on port 8765 that responds to GET /health with HTTP status 200 and "
-        "body exactly `ok`. The server should keep running until terminated.",
+        "server on the port given by the PORT environment variable (default 8765 "
+        "if unset) that responds to GET /health with HTTP status 200 and body "
+        "exactly `ok`. The server should keep running until terminated.",
         [feat(1, "health", "GET", "/health", "200", "ok")],
         difficulty="regression",
-        reference="http.server-based app.py serving /health -> 200 'ok' on :8765.",
+        reference="http.server-based app.py serving /health -> 200 'ok' on $PORT.",
         verify=[{"id": "server-responds", "cmd": SERVER_PROBE, "weight": 1.0}],
+    ))
+
+    # Capability-level executable-verified task (multi-module package). Richer
+    # real grading (imports + behaviour + pytest). NOTE: the real backend does not
+    # *force* compaction, so on real Claude this still one-shots → ON≈OFF; the
+    # compaction_boundaries below only drives the SIMULATED A/B (where it does show
+    # an ON/OFF gap). Real long-horizon divergence needs genuinely long tasks.
+    tasks.append(task(
+        "v03-tasklib-verified",
+        "Multi-module package (executable-verified, capability)",
+        "Build a small Python package, verified by importing and running it.",
+        "Create a Python package `tasklib/` at the project root with:\n"
+        "1. tasklib/__init__.py (may be empty)\n"
+        "2. tasklib/models.py: a `Task` dataclass with fields id:int, title:str, done:bool\n"
+        "3. tasklib/store.py: class `TaskStore` with add(title)->Task (auto-increment id, "
+        "done=False), complete(id)->bool, list_all()->list[Task]\n"
+        "4. tasklib/cli.py: a `main()` function with an argparse CLI exposing "
+        "subcommands `add <title>`, `done <id>`, `list` (printing to stdout)\n"
+        "5. tests/test_store.py: pytest tests for TaskStore\n"
+        "All imports must work and the tests must pass.",
+        [
+            feat(1, "models", "class Task", "dataclass", "title", "done"),
+            feat(2, "store", "class TaskStore", "add", "complete", "list_all"),
+            feat(3, "cli", "argparse", "add", "done", "list"),
+            feat(4, "tests", "def test_", "assert", "TaskStore"),
+        ],
+        difficulty="capability",
+        compaction_boundaries=1,
+        reference="tasklib/ package (models, store, cli, main) + passing tests.",
+        verify=[
+            {"id": "imports-work",
+             "cmd": "python3 -c \"from tasklib.models import Task; from tasklib.store import TaskStore; from tasklib.cli import main\"",
+             "weight": 1.0},
+            {"id": "store-add-list",
+             "cmd": "python3 -c \"from tasklib.store import TaskStore; s=TaskStore(); t=s.add('x'); assert t.title=='x'; assert len(s.list_all())==1\"",
+             "weight": 1.0},
+            {"id": "store-complete",
+             "cmd": "python3 -c \"from tasklib.store import TaskStore; s=TaskStore(); t=s.add('x'); assert s.complete(t.id); assert s.list_all()[0].done\"",
+             "weight": 1.0},
+            {"id": "tests-pass", "cmd": "python3 -m pytest tests/test_store.py -q", "weight": 1.5},
+        ],
     ))
 
     return tasks

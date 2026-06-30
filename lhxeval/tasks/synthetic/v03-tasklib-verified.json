@@ -1,0 +1,80 @@
+{
+  "id": "v03-tasklib-verified",
+  "title": "Multi-module package (executable-verified, capability)",
+  "goal": "Build a small Python package, verified by importing and running it.",
+  "prompt": "Create a Python package `tasklib/` at the project root with:\n1. tasklib/__init__.py (may be empty)\n2. tasklib/models.py: a `Task` dataclass with fields id:int, title:str, done:bool\n3. tasklib/store.py: class `TaskStore` with add(title)->Task (auto-increment id, done=False), complete(id)->bool, list_all()->list[Task]\n4. tasklib/cli.py: a `main()` function with an argparse CLI exposing subcommands `add <title>`, `done <id>`, `list` (printing to stdout)\n5. tests/test_store.py: pytest tests for TaskStore\nAll imports must work and the tests must pass.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "F01-models",
+      "description": "Implement models",
+      "requires": [
+        "class Task",
+        "dataclass",
+        "title",
+        "done"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F02-store",
+      "description": "Implement store",
+      "requires": [
+        "class TaskStore",
+        "add",
+        "complete",
+        "list_all"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F03-cli",
+      "description": "Implement cli",
+      "requires": [
+        "argparse",
+        "add",
+        "done",
+        "list"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "F04-tests",
+      "description": "Implement tests",
+      "requires": [
+        "def test_",
+        "assert",
+        "TaskStore"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 1,
+  "interruption": false,
+  "reference_solution": "tasklib/ package (models, store, cli, main) + passing tests.",
+  "verify": [
+    {
+      "id": "imports-work",
+      "cmd": "python3 -c \"from tasklib.models import Task; from tasklib.store import TaskStore; from tasklib.cli import main\"",
+      "weight": 1.0
+    },
+    {
+      "id": "store-add-list",
+      "cmd": "python3 -c \"from tasklib.store import TaskStore; s=TaskStore(); t=s.add('x'); assert t.title=='x'; assert len(s.list_all())==1\"",
+      "weight": 1.0
+    },
+    {
+      "id": "store-complete",
+      "cmd": "python3 -c \"from tasklib.store import TaskStore; s=TaskStore(); t=s.add('x'); assert s.complete(t.id); assert s.list_all()[0].done\"",
+      "weight": 1.0
+    },
+    {
+      "id": "tests-pass",
+      "cmd": "python3 -m pytest tests/test_store.py -q",
+      "weight": 1.5
+    }
+  ],
+  "simulation": {
+    "residual_fail_prob": 0.03
+  }
+}
