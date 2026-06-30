@@ -107,9 +107,14 @@ def run_ab(
     k: int = 5,
     base_seed: int = 1000,
     bootstrap_iters: int = 10000,
+    progress=None,
 ) -> ABResult:
+    """``progress(done, total, task_id, arm)`` is called before each trial (for a
+    live progress line — useful since real-backend trials take minutes)."""
     backend = backend or SimulatedBackend()
     seeds = [base_seed + i for i in range(k)]
+    total = len(tasks) * len(seeds) * 2
+    done = 0
 
     trials: list[TrialResult] = []
     # paired vectors keyed implicitly by (task, seed) order
@@ -120,8 +125,13 @@ def run_ab(
 
     for task in tasks:
         for i, seed in enumerate(seeds):
+            if progress:
+                progress(done + 1, total, task.id, "on")
             r_on = run_trial(backend, task, "on", seed, i)
+            if progress:
+                progress(done + 2, total, task.id, "off")
             r_off = run_trial(backend, task, "off", seed, i)
+            done += 2
             trials.extend([r_on, r_off])
 
             on_success.append(1.0 if r_on.success else 0.0)

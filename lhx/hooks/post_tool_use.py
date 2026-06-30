@@ -35,6 +35,15 @@ def main() -> int:
             or ""
         )
         rt.memory.note(f"[{tool_name}] {str(target)[:80]}")
+        # Also append to the cross-session PROGRESS.md. Without this, a session
+        # that ends via `max_turns` (rather than a clean Stop) leaves PROGRESS.md
+        # untouched — and the next SessionStart's resume context is blank, so the
+        # agent rescans from scratch. With it, the next session's SessionStart
+        # tail-reads exactly "what got edited last shift". Cheap (Edit/Write only,
+        # one short line per call) and keeps the ledger truthful even when the
+        # completion gate blocks Stop.
+        if tool_name in ("Write", "Edit"):
+            rt.ledger.append(f"[{tool_name}] {str(target)[:80]}")
 
     if rt.config.reflection:
         count = rt.tool_call_count()

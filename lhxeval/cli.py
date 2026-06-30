@@ -50,17 +50,32 @@ def cmd_run(args: argparse.Namespace) -> int:
         # Only tasks with executable `verify` checks — for a REAL A/B on a real
         # backend graded by actual tests, not the agent's self-report.
         tasks = [t for t in tasks if t.verify]
+    if args.task_id:
+        wanted = set(args.task_id)
+        tasks = [t for t in tasks if t.id in wanted]
     if not tasks:
         print(
-            f"WARNING: no tasks match difficulty filter "
-            f"'{args.difficulty}' in {args.tasks}. Nothing to run.",
+            f"WARNING: no tasks match filter "
+            f"(difficulty={args.difficulty!r}, task_id={args.task_id!r}, "
+            f"verified_only={args.verified_only}) in {args.tasks}. Nothing to run.",
             file=sys.stderr,
         )
         return 1
     backend = get_backend(args.backend)
     print(f"Running A/B: {len(tasks)} tasks x k={args.k} x 2 arms "
           f"= {len(tasks) * args.k * 2} trials (backend={backend.name})")
-    result = run_ab(tasks, backend=backend, k=args.k, base_seed=args.seed)
+
+    def _progress(done, total, task_id, arm):
+        bar_w = 24
+        filled = int(bar_w * (done - 1) / total)
+        bar = "█" * filled + "·" * (bar_w - filled)
+        print(f"\r  [{bar}] {done}/{total}  {task_id} ({arm})        ",
+              end="", file=sys.stderr, flush=True)
+        if done == total:
+            print(file=sys.stderr)
+
+    result = run_ab(tasks, backend=backend, k=args.k, base_seed=args.seed,
+                    progress=_progress)
 
     out_dir = Path(args.out)
     write_results_json(result, out_dir / "results.json")
@@ -96,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--difficulty", default=None, help="capability | regression")
     pr.add_argument("--verified-only", action="store_true",
                     help="only tasks with executable `verify` checks (real-graded A/B)")
+    pr.add_argument("--task-id", action="append", default=None,
+                    help="filter to a specific task id (repeatable)")
     pr.add_argument("--out", default="runs/latest")
     pr.set_defaults(func=cmd_run)
 

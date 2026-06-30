@@ -95,6 +95,29 @@ def test_post_tool_use_updates_rolling_memory(tmp_path, monkeypatch):
     assert "[Write] src/app.py" in mem  # the note() call is actually wired in
 
 
+def test_post_tool_use_appends_edits_to_progress(tmp_path, monkeypatch):
+    """Edits must also land in cross-session PROGRESS.md — without this, a
+    session killed by max_turns leaves the next session's resume context blank."""
+    event = seed_workspace(tmp_path)
+    event["tool_name"] = "Edit"
+    event["tool_input"] = {"file_path": "src/mod_03.py"}
+    run_hook(post_tool_use.main, event, monkeypatch)
+    event2 = dict(event)
+    event2["tool_name"] = "Write"
+    event2["tool_input"] = {"file_path": "src/mod_07.py"}
+    run_hook(post_tool_use.main, event2, monkeypatch)
+    progress = (tmp_path / "PROGRESS.md").read_text()
+    assert "[Edit] src/mod_03.py" in progress
+    assert "[Write] src/mod_07.py" in progress
+    # Read is informational; it must NOT spam PROGRESS.md or every page-through
+    # would balloon the ledger.
+    event3 = dict(event)
+    event3["tool_name"] = "Read"
+    event3["tool_input"] = {"file_path": "src/mod_03.py"}
+    run_hook(post_tool_use.main, event3, monkeypatch)
+    assert "[Read]" not in (tmp_path / "PROGRESS.md").read_text()
+
+
 def test_stop_completion_gate_blocks_until_all_pass(tmp_path, monkeypatch):
     event = seed_workspace(tmp_path, n_features=2, passing=1)
     out = run_hook(stop.main, event, monkeypatch)

@@ -73,6 +73,10 @@ class Task(BaseModel):
     # If true, the harness will interrupt mid-task and require resume.
     interruption: bool = False
     reference_solution: str = ""         # proves solvability; used by sanity check
+    # Shell command run in the fresh workspace BEFORE the agent starts, to seed
+    # initial state (mirrors OSWorld's `config` setup / Harbor task fixtures).
+    # Used to seed a large repo that forces real context pressure. Real backend only.
+    setup: str = ""
     simulation: SimulationParams = Field(default_factory=SimulationParams)
     # Executable verification for REAL runs (the SDK/CLI backend). When present
     # and run against a real workspace, these — not the agent's self-report —

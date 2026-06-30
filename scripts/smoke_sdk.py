@@ -43,16 +43,27 @@ def main() -> int:
         return 2
     task = tasks[task_id]
 
+    raw_disallow = os.environ.get("LHX_SDK_DISALLOWED_TOOLS", "").strip()
+    disallowed = [p.strip() for p in raw_disallow.split(",") if p.strip()] or None
+    raw_allow = os.environ.get("LHX_SDK_ALLOWED_TOOLS", "").strip()
+    allowed = [p.strip() for p in raw_allow.split(",") if p.strip()] or None
+    raw_tools = os.environ.get("LHX_SDK_TOOLS", "").strip()
+    tools = [p.strip() for p in raw_tools.split(",") if p.strip()] or None
     backend = ClaudeAgentSDKBackend(
         model=os.environ.get("LHX_SDK_MODEL", "claude-haiku-4-5-20251001"),
         max_turns=int(os.environ.get("LHX_SDK_MAX_TURNS", "40")),
         timeout_seconds=int(os.environ.get("LHX_SDK_TIMEOUT", "600")),
+        max_sessions=int(os.environ.get("LHX_SDK_MAX_SESSIONS", "1")),
+        disallowed_tools=disallowed,
+        allowed_tools=allowed,
+        tools=tools,
         keep_sandbox=True,  # keep the workspace so we can inspect what happened
     )
     print(f"Running task '{task.id}' (module ON) via transport="
           f"{backend._resolve_transport()} — this can take a few minutes ...\n")
 
-    outcome = backend.run(task, Config(enabled=True), seed=0, directives=Directives())
+    enabled = os.environ.get("LHX_ENABLED", "true").lower() != "false"
+    outcome = backend.run(task, Config(enabled=enabled), seed=0, directives=Directives())
     result = grade(task, outcome)
 
     # This verifies the module actually ran against real Claude (integration). If

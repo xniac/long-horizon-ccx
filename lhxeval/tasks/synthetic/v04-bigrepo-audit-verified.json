@@ -1,0 +1,33 @@
+{
+  "id": "v04-bigrepo-audit-verified",
+  "title": "Audit 50 modules in a large repo (context-pressure, verified)",
+  "goal": "Add an AUDITED flag to every module in a large seeded repo.",
+  "prompt": "The directory `src/` contains 50 modules `mod_00.py` .. `mod_49.py`, each defining `handler()`. Add a module-level line `AUDITED = True` to EVERY one of the 50 modules. Do not delete existing code; keep all imports working. Work through all 50 \u2014 do not stop early.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "F01-audit-all",
+      "description": "Implement audit all",
+      "requires": [
+        "AUDITED",
+        "True",
+        "all modules"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 1,
+  "interruption": false,
+  "reference_solution": "AUDITED = True appended to all 50 src/mod_*.py modules.",
+  "verify": [
+    {
+      "id": "all-50-audited",
+      "cmd": "python3 -c \"import importlib,sys; sys.path.insert(0,'.'); miss=[i for i in range(50) if not getattr(importlib.import_module('src.mod_%02d'%i),'AUDITED',False)]; assert not miss, f'missing {len(miss)}: {miss[:10]}'\"",
+      "weight": 1.0
+    }
+  ],
+  "setup": "python3 - <<'PY'\nimport os\nos.makedirs('src', exist_ok=True)\nopen('src/__init__.py', 'w').close()\nfiller = ('# ' + 'lorem ipsum dolor sit amet consectetur ' * 6 + '\\n') * 60\nfor i in range(50):\n    with open(f'src/mod_{i:02d}.py', 'w') as f:\n        f.write(f'\\\"\\\"\\\"Module {i} \u2014 do not delete existing code.\\\"\\\"\\\"\\n')\n        f.write(filler)\n        f.write(f'\\ndef handler():\\n    return {i}\\n')\nPY\n",
+  "simulation": {
+    "residual_fail_prob": 0.03
+  }
+}

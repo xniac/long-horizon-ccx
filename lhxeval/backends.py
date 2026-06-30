@@ -35,6 +35,9 @@ class RunOutcome:
     events: list[dict] = field(default_factory=list)
     # Executable verification results for real runs: check_id -> passed.
     checks: dict[str, bool] = field(default_factory=dict)
+    # Number of (fresh) Claude sessions the trial used — >1 in the multi-session
+    # long-horizon mode where each session is turn-capped so none can one-shot.
+    sessions: int = 1
 
     def artifact_text(self) -> str:
         return "\n".join(self.artifact.values())
@@ -216,16 +219,40 @@ class ClaudeAgentSDKBackend(AgentBackend):
         transport: str = "auto",
         permission_mode: str = "bypassPermissions",
         keep_sandbox: bool = False,
+        max_sessions: int = 1,
+        disallowed_tools: list[str] | None = None,
+        allowed_tools: list[str] | None = None,
+        tools: list[str] | None = None,
     ):
         self.model = model
         self.max_turns = max_turns
         self.timeout_seconds = timeout_seconds
         self.transport = transport
+        # >1 enables the multi-session long-horizon mode: run claude -p FRESH up to
+        # max_sessions times in one persistent workspace (each turn-capped by
+        # max_turns), stopping when the executable checks pass. Tests whether the
+        # module's on-disk ledger lets amnesiac sessions converge (M4/M7).
+        self.max_sessions = max_sessions
         # Headless tool use needs a non-interactive permission mode, or the CLI
         # blocks on a permission/trust prompt and looks "stuck". Sandboxes are
         # disposable, so bypassPermissions is appropriate here.
         self.permission_mode = permission_mode
         self.keep_sandbox = keep_sandbox
+        # Per-tool blocklist passed straight to Claude (`--disallowedTools` / SDK
+        # `disallowed_tools`). Patterns like "Bash(sed *)" block sed but leave the
+        # rest of Bash usable. Note: a blocklist is whack-a-mole — Haiku will
+        # bypass `Bash` via the `Skill`/`Agent`/`ToolSearch` subagent path. Prefer
+        # `allowed_tools` (an explicit whitelist) when the goal is to force
+        # per-file Read+Edit (see DESIGN.md §5.9, v04 audit experiment).
+        self.disallowed_tools = list(disallowed_tools) if disallowed_tools else []
+        # `--allowedTools` is a PERMISSION allowlist (skip the prompt for these);
+        # under bypassPermissions it is a no-op for restriction. To actually shrink
+        # the agent's toolbelt, use ``tools`` below.
+        self.allowed_tools = list(allowed_tools) if allowed_tools else []
+        # `--tools` is the real "base toolset" selector — only the listed built-in
+        # tools are exposed to the model. e.g. ["Read", "Edit", "Write", "Glob"]
+        # to force per-file I/O on context-pressure tasks (no Bash bypass).
+        self.tools = list(tools) if tools else []
         # Diagnostics from the most recent run (for smoke/debug).
         self.last_cli: dict | None = None
         self.last_workspace: str | None = None
@@ -269,18 +296,40 @@ class ClaudeAgentSDKBackend(AgentBackend):
             cfg_file.write_text(config.model_dump_json(), encoding="utf-8")
             env["LHX_CONFIG"] = str(cfg_file)
 
-            cost = (
-                self._run_cli(ws, env, task.prompt)
-                if transport == "cli"
-                else self._run_sdk(ws, env, task.prompt)
-            )
+            # Seed initial state (e.g. a large repo to force context pressure).
+            if task.setup:
+                import subprocess
+                subprocess.run(["bash", "-lc", task.setup], cwd=str(ws), env=env,
+                               capture_output=True, text=True, timeout=120, check=False)
+
+            run_one = self._run_cli if transport == "cli" else self._run_sdk
+
+            total_cost = {"usd": 0.0, "tokens": 0}
+            sessions = 0
+            checks: dict[str, bool] = {}
+            for _ in range(max(1, self.max_sessions)):
+                sessions += 1
+                c = run_one(ws, env, task.prompt)   # FRESH session (no --continue)
+                total_cost["usd"] += c.get("usd", 0.0) or 0.0
+                total_cost["tokens"] += c.get("tokens", 0) or 0
+                if os.environ.get("LHX_SDK_DEBUG"):
+                    import sys as _sys
+                    _sys.stderr.write(
+                        f"  [lhx-sdk] session {sessions}/{self.max_sessions} "
+                        f"cost=${c.get('usd', 0.0):.4f} tokens={c.get('tokens', 0)} "
+                        f"terminal={(self.last_cli or {}).get('returncode')}\n"
+                    )
+                # Grade between sessions so we can stop as soon as the task passes.
+                if task.verify:
+                    checks = self._run_checks(ws, task.verify, env)
+                    if checks and all(checks.values()):
+                        break
+
             outcome = self._reconstruct_outcome(ws, FeatureList)
-            outcome.tokens = cost.get("tokens", 0)
-            outcome.cost_usd = cost.get("usd", 0.0)
-            # Real, outcome-based grading: run the task's executable checks
-            # against the produced workspace (must happen before teardown).
-            if task.verify:
-                outcome.checks = self._run_checks(ws, task.verify, env)
+            outcome.tokens = total_cost["tokens"]
+            outcome.cost_usd = total_cost["usd"]
+            outcome.sessions = sessions
+            outcome.checks = checks
             return outcome
 
     def _run_checks(self, ws, checks, env) -> dict:
@@ -322,6 +371,12 @@ class ClaudeAgentSDKBackend(AgentBackend):
         cmd += ["--output-format", "json"]  # machine-readable result incl. cost/usage
         if self.permission_mode and self.permission_mode != "default":
             cmd += ["--permission-mode", self.permission_mode]  # don't hang on prompts
+        if self.disallowed_tools:
+            cmd += ["--disallowedTools", *self.disallowed_tools]
+        if self.allowed_tools:
+            cmd += ["--allowedTools", *self.allowed_tools]
+        if self.tools:
+            cmd += ["--tools", *self.tools]
         try:
             proc = subprocess.run(
                 cmd, input=prompt, capture_output=True, text=True,
@@ -368,12 +423,21 @@ class ClaudeAgentSDKBackend(AgentBackend):
         async def _go():
             # setting_sources=["project"] loads the sandbox .claude/ (hooks +
             # CLAUDE.md); if your SDK version lacks a kwarg, drop to the minimal form.
+            opts: dict = dict(
+                cwd=str(ws), permission_mode="bypassPermissions",
+                max_turns=self.max_turns, setting_sources=["project"],
+            )
+            if self.disallowed_tools:
+                opts["disallowed_tools"] = list(self.disallowed_tools)
+            if self.allowed_tools:
+                opts["allowed_tools"] = list(self.allowed_tools)
             try:
-                options = ClaudeAgentOptions(
-                    cwd=str(ws), permission_mode="bypassPermissions",
-                    max_turns=self.max_turns, setting_sources=["project"],
-                )
+                options = ClaudeAgentOptions(**opts)
             except TypeError:
+                # Older SDK builds may lack one of the kwargs (setting_sources or
+                # disallowed_tools). Fall back to the minimal form and warn — the
+                # disallow list is then dropped on the SDK path; use the CLI
+                # transport (which always honours --disallowedTools) instead.
                 options = ClaudeAgentOptions(cwd=str(ws), permission_mode="bypassPermissions")
             async for msg in query(prompt=prompt, options=options):
                 tc = getattr(msg, "total_cost_usd", None)
@@ -428,5 +492,16 @@ def get_backend(name: str, **kwargs) -> AgentBackend:
         kwargs.setdefault("model", os.environ.get("LHX_SDK_MODEL", "claude-haiku-4-5-20251001"))
         kwargs.setdefault("max_turns", int(os.environ.get("LHX_SDK_MAX_TURNS", "80")))
         kwargs.setdefault("timeout_seconds", int(os.environ.get("LHX_SDK_TIMEOUT", "900")))
+        kwargs.setdefault("max_sessions", int(os.environ.get("LHX_SDK_MAX_SESSIONS", "1")))
+        # Comma-separated; spaces inside a pattern are fine ("Bash(sed *)").
+        raw = os.environ.get("LHX_SDK_DISALLOWED_TOOLS", "").strip()
+        if raw and "disallowed_tools" not in kwargs:
+            kwargs["disallowed_tools"] = [p.strip() for p in raw.split(",") if p.strip()]
+        raw_allow = os.environ.get("LHX_SDK_ALLOWED_TOOLS", "").strip()
+        if raw_allow and "allowed_tools" not in kwargs:
+            kwargs["allowed_tools"] = [p.strip() for p in raw_allow.split(",") if p.strip()]
+        raw_tools = os.environ.get("LHX_SDK_TOOLS", "").strip()
+        if raw_tools and "tools" not in kwargs:
+            kwargs["tools"] = [p.strip() for p in raw_tools.split(",") if p.strip()]
         return ClaudeAgentSDKBackend(**kwargs)
     raise ValueError(f"unknown backend: {name}")

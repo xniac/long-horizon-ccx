@@ -14,26 +14,31 @@ honest uncertainty.
 > Take-home: direction = **Long-horizon**, target = **Claude Code**. Full
 > rationale, prior-art mapping, and methodology are in **[DESIGN.md](DESIGN.md)**.
 
-## Headline result
+## Two layers of result (don't conflate them)
 
-Simulated backend, 12 tasks × k=10 × 2 arms = 240 trials (`lhx-eval run -k 10`):
+**1. Harness-validation — instrument calibration, *not* a capability claim and *not*
+an industry-standard eval** (nobody simulates the agent to measure it). On a
+simulated backend with a *known* effect (13 tasks × k=10), the harness correctly
+detects it and shows no false positive on the regression control:
 
-| metric | module ON | module OFF | Δ |
+| metric | ON | OFF | Δ |
 |---|---|---|---|
-| pass@1 (macro) | **91.7%** | 47.5% | +44.2pp |
-| pass^3 (reliability) | **77.7%** | 41.7% | +36.0pp |
-| compaction-survival | **82.0%** | 6.0% | +76.0pp |
-| resume-after-interruption | **93.3%** | 13.3% | +80.0pp |
-| goal-drift rate | **0.0%** | 53.3% | −53.3pp |
-| doom-loops / trial | **0.09** | 0.46 | −0.37 |
+| pass@1 (macro) | 92.3% | 50.8% | +41.5pp |
+| pass^3 (reliability) | 79.4% | 43.8% | +35.6pp |
+| compaction-survival | 85.0% | 20.0% | +65.0pp |
+| goal-drift rate | 0.0% | 49.2% | −49.2pp |
 
-Paired success delta **+0.442 [+0.350, +0.533]** (95% bootstrap CI); McNemar
-exact **p ≈ 2.2e-16** (helped 53, hurt 0). ⚠️ This is a **harness-validation**
-run, not a real-model capability claim: the numbers come from a *simulated* agent
-with known ground-truth effects, used to prove the harness **detects an effect it
-knows exists** (see DESIGN §5.8). For **real** metrics, the same harness runs
-against real Claude with **executable verification** (DESIGN §5.9, already
-working): `python scripts/smoke_sdk.py v01-slugify-verified`.
+Paired Δ +0.415 [+0.331, +0.500]; McNemar p≈1e-16. The effect is *by construction*
+— this proves the ruler is accurate, not that the module helps real Claude.
+
+**2. Real evaluation (the honest one).** On real Claude (Haiku) graded by
+**executable checks** (`lhx-eval run --backend sdk --verified-only`): at our task
+scales the module is **net-neutral / overhead** — e.g. multi-session v03 finishes
+in 1 cold session (OFF) vs 3 (ON), and the 178k-token v04 never compacts because
+the agent batches via shell. A real long-horizon win needs tasks that genuinely
+exceed a session — best reached via a Harbor adapter onto Terminal-Bench
+(DESIGN §5.9–§5.10). **The contribution is the eval that tells these apart and
+reports overhead honestly — not a flashy number.**
 
 ## Quickstart
 
@@ -76,6 +81,13 @@ LHX_SDK_MAX_TURNS=45 lhx-eval run --backend sdk --verified-only -k 1
 
 # the full paired A/B against real Claude over the whole suite:
 lhx-eval run -k 3 --backend sdk
+
+# MULTI-SESSION long-horizon mode: fresh `claude -p` re-invocations in one
+# workspace, each turn-capped so none can one-shot (tests cross-session value):
+LHX_SDK_MAX_TURNS=7 LHX_SDK_MAX_SESSIONS=5 lhx-eval run --backend sdk --verified-only -k 1
+# → records sessions-to-completion + cost. NB: on v03 (one-session-sized for
+#   Haiku) the module is net overhead — a real win needs a task that can't fit
+#   one capped session (see DESIGN §5.9 / §7).
 ```
 
 `.env` knobs (see [.env.template](.env.template)): `LHX_SDK_TRANSPORT`

@@ -14,8 +14,10 @@ shared memory. Follow these conventions exactly.
 ## While working
 - Work **one feature at a time**. Do not try to one-shot the whole project.
 - **Proof before passing.** Only flip a feature to `passes: true` after you have
-  produced and *read back* concrete evidence (test output, screenshot, command
-  result). The verify-gate enforces this.
+  evidence the work is done — *preferably* a verification command's exit
+  status / output. If you don't have a shell tool, the result of your own
+  `Edit`/`Write` call IS your evidence; do **not** re-`Read` files just to
+  confirm your own change landed.
 - Commit often with descriptive messages. git is your rollback to a known-good
   state.
 - Keep notes in `MEMORY.md` short and current — it is capped on purpose.

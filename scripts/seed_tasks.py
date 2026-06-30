@@ -37,7 +37,7 @@ def feat(i: int, slug: str, *requires: str, weight: float = 1.0) -> dict:
 def task(
     id, title, goal, prompt, features, *,
     difficulty="capability", compaction_boundaries=0, interruption=False,
-    reference="", sim=None, verify=None,
+    reference="", sim=None, verify=None, setup="",
 ) -> dict:
     t = {
         "id": id,
@@ -52,6 +52,8 @@ def task(
     }
     if verify:
         t["verify"] = verify
+    if setup:
+        t["setup"] = setup
     if sim is None and difficulty == "capability":
         sim = CAP_SIM
     if sim is None and difficulty == "regression":
@@ -82,6 +84,24 @@ SERVER_PROBE = (
     "    sys.exit(1)\n"
     "finally:\n"
     "    p.terminate()\n"
+    "PY\n"
+)
+
+
+# Seeds a large repo (50 bulky modules) so the agent must Read ~150k tokens to
+# edit them all — engineered to actually pressure Haiku's context window and
+# trigger a real compaction (observable via the PreCompact hook's events).
+BIG_REPO_SETUP = (
+    "python3 - <<'PY'\n"
+    "import os\n"
+    "os.makedirs('src', exist_ok=True)\n"
+    "open('src/__init__.py', 'w').close()\n"
+    "filler = ('# ' + 'lorem ipsum dolor sit amet consectetur ' * 6 + '\\n') * 60\n"
+    "for i in range(50):\n"
+    "    with open(f'src/mod_{i:02d}.py', 'w') as f:\n"
+    "        f.write(f'\\\"\\\"\\\"Module {i} — do not delete existing code.\\\"\\\"\\\"\\n')\n"
+    "        f.write(filler)\n"
+    "        f.write(f'\\ndef handler():\\n    return {i}\\n')\n"
     "PY\n"
 )
 
@@ -326,6 +346,32 @@ def build() -> list[dict]:
              "cmd": "python3 -c \"from tasklib.store import TaskStore; s=TaskStore(); t=s.add('x'); assert s.complete(t.id); assert s.list_all()[0].done\"",
              "weight": 1.0},
             {"id": "tests-pass", "cmd": "python3 -m pytest tests/test_store.py -q", "weight": 1.5},
+        ],
+    ))
+
+    # Context-pressure task: a large seeded repo (50 bulky modules) where editing
+    # them all forces the agent to Read ~150k tokens → designed to trigger a REAL
+    # Haiku compaction (observable via the PreCompact hook). This is the genuinely
+    # long-horizon executable-verified task; verification greps the edited state.
+    tasks.append(task(
+        "v04-bigrepo-audit-verified",
+        "Audit 50 modules in a large repo (context-pressure, verified)",
+        "Add an AUDITED flag to every module in a large seeded repo.",
+        "The directory `src/` contains 50 modules `mod_00.py` .. `mod_49.py`, each "
+        "defining `handler()`. Add a module-level line `AUDITED = True` to EVERY "
+        "one of the 50 modules. Do not delete existing code; keep all imports "
+        "working. Work through all 50 — do not stop early.",
+        [feat(1, "audit-all", "AUDITED", "True", "all modules")],
+        difficulty="capability",
+        compaction_boundaries=1,
+        reference="AUDITED = True appended to all 50 src/mod_*.py modules.",
+        setup=BIG_REPO_SETUP,
+        verify=[
+            {"id": "all-50-audited",
+             "cmd": "python3 -c \"import importlib,sys; sys.path.insert(0,'.'); "
+                    "miss=[i for i in range(50) if not getattr(importlib.import_module('src.mod_%02d'%i),'AUDITED',False)]; "
+                    "assert not miss, f'missing {len(miss)}: {miss[:10]}'\"",
+             "weight": 1.0},
         ],
     ))
 
