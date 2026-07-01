@@ -1,0 +1,156 @@
+{
+  "id": "v06-debug-session-scoped",
+  "title": "Debug 8 modules, one module per session, only that module's tests visible (v06 refinement)",
+  "goal": "Fix the single bug in each of 8 calc modules; you may only see/run one module + its tests per session.",
+  "prompt": "This project is a calculator library split into 8 small modules under calc/, each with ONE bug. Each module has its own test file under tests/ (test_<module>.py). The tests are CORRECT \u2014 do NOT modify them.\n\n**STRICT PER-SESSION RULES:**\n1. You may debug EXACTLY ONE module per session. Pick the next unfixed module per feature_list.json.\n2. You may open/read ONLY that one module's source and ONLY that module's test file this session.\n3. You may run ONLY that module's test file, e.g. `python3 -m pytest tests/test_arithmetic.py`. Do NOT run the full test suite or `pytest` over the whole tests/ directory \u2014 that wastes budget and violates the rules.\n4. **You have amnesia between sessions.** Only PROGRESS.md and feature_list.json survive. There is NO global 'all tests' view available to you \u2014 trust the ledger to know what is done and what remains.\n\nEach session:\na. Read PROGRESS.md and feature_list.json fully to see which modules are DONE and which REMAIN.\nb. Pick the next module that is NOT yet passing.\nc. Fix its single bug; run only that module's test file to confirm.\nd. Update PROGRESS.md (module fixed + what remains) and flip that feature to passes:true in feature_list.json with the test name as evidence.\ne. Stop. Do the next module in the NEXT session.\n\nYou are done ONLY when ALL 8 modules (all features in feature_list.json) are fixed.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "m1-divide",
+      "description": "arithmetic.divide(1,0) raises ZeroDivisionError",
+      "requires": [
+        "ZeroDivisionError"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m1-power",
+      "description": "arithmetic.power(x,0) returns 1",
+      "requires": [
+        "return 1"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m2-factorial",
+      "description": "sequences.factorial(-1) raises ValueError",
+      "requires": [
+        "ValueError"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m2-fibonacci",
+      "description": "sequences.fibonacci off-by-one: return b",
+      "requires": [
+        "return b"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m3-median",
+      "description": "averages.median even-length averages two middle",
+      "requires": [
+        "mid-1"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m4-variance",
+      "description": "spread.variance divides by n-1",
+      "requires": [
+        "n - 1"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m5-celsius",
+      "description": "temperature.celsius_to_fahrenheit uses + 32",
+      "requires": [
+        "+ 32"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m6-pounds",
+      "description": "mass.pounds_to_kg divides by 2.205",
+      "requires": [
+        "/ 2.205"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m7-km",
+      "description": "distance.km_to_miles divides by 1.60934",
+      "requires": [
+        "/ 1.60934"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "m8-clamp",
+      "description": "bounds.clamp returns max(lo, min(hi, x))",
+      "requires": [
+        "min(",
+        "max("
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": false,
+  "reference_solution": "Fix one bug per module across 8 modules: ZeroDivisionError, power=1, ValueError, return b, avg median, n-1 variance, +32, /2.205, /1.60934, clamp=max(lo,min(hi,x)).",
+  "setup": "mkdir -p calc tests\necho '' > calc/__init__.py\ncat > calc/arithmetic.py << 'XEOF'\ndef add(a, b): return a + b\ndef divide(a, b):\n    if b == 0: return 0        # BUG: should raise ZeroDivisionError\n    return a / b\ndef power(base, exp):\n    if exp == 0: return 0      # BUG: should return 1\n    return base ** exp\nXEOF\ncat > calc/sequences.py << 'XEOF'\ndef factorial(n):\n    if n < 0: return -1        # BUG: should raise ValueError\n    result = 1\n    for i in range(1, n + 1): result *= i\n    return result\ndef fibonacci(n):\n    if n <= 0: return 0\n    if n == 1: return 1\n    a, b = 0, 1\n    for _ in range(n - 1): a, b = b, a + b\n    return a                   # BUG: should return b\nXEOF\ncat > calc/averages.py << 'XEOF'\ndef mean(values):\n    if not values: return 0\n    return sum(values) / len(values)\ndef median(values):\n    if not values: return 0\n    s = sorted(values); n = len(s); mid = n // 2\n    if n % 2 == 0: return s[mid]   # BUG: should average s[mid-1] and s[mid]\n    return s[mid]\nXEOF\ncat > calc/spread.py << 'XEOF'\nimport math\nfrom calc.averages import mean\ndef variance(values):\n    if len(values) < 2: return 0\n    m = mean(values)\n    return sum((x - m) ** 2 for x in values) / len(values)   # BUG: divide by n-1\ndef std_dev(values): return math.sqrt(variance(values))\nXEOF\ncat > calc/temperature.py << 'XEOF'\ndef celsius_to_fahrenheit(c): return c * 9/5 - 32   # BUG: + 32 not - 32\nXEOF\ncat > calc/mass.py << 'XEOF'\ndef pounds_to_kg(lbs): return lbs * 2.205           # BUG: / 2.205 not * 2.205\nXEOF\ncat > calc/distance.py << 'XEOF'\ndef km_to_miles(km): return km * 1.60934            # BUG: / 1.60934 not * 1.60934\nXEOF\ncat > calc/bounds.py << 'XEOF'\ndef clamp(x, lo, hi): return x                      # BUG: should be max(lo, min(hi, x))\nXEOF\ncat > tests/test_arithmetic.py << 'XEOF'\nimport pytest\nfrom calc.arithmetic import add, divide, power\ndef test_add(): assert add(2,3)==5\ndef test_divide():\n    assert divide(10,2)==5.0\n    with pytest.raises(ZeroDivisionError): divide(1,0)\ndef test_power(): assert power(2,3)==8; assert power(5,0)==1\nXEOF\ncat > tests/test_sequences.py << 'XEOF'\nimport pytest\nfrom calc.sequences import factorial, fibonacci\ndef test_factorial():\n    assert factorial(5)==120; assert factorial(0)==1\n    with pytest.raises(ValueError): factorial(-1)\ndef test_fibonacci(): assert fibonacci(0)==0; assert fibonacci(6)==8; assert fibonacci(10)==55\nXEOF\ncat > tests/test_averages.py << 'XEOF'\nfrom calc.averages import mean, median\ndef test_mean(): assert mean([1,2,3,4,5])==3.0\ndef test_median_odd(): assert median([1,3,5])==3\ndef test_median_even(): assert median([1,2,3,4])==2.5\nXEOF\ncat > tests/test_spread.py << 'XEOF'\nfrom calc.spread import variance, std_dev\ndef test_variance(): assert abs(variance([2,4,4,4,5,5,7,9])-4.571)<0.01\ndef test_std_dev(): assert abs(std_dev([2,4,4,4,5,5,7,9])-2.138)<0.01\nXEOF\ncat > tests/test_temperature.py << 'XEOF'\nfrom calc.temperature import celsius_to_fahrenheit\ndef test_celsius(): assert celsius_to_fahrenheit(0)==32; assert celsius_to_fahrenheit(100)==212\nXEOF\ncat > tests/test_mass.py << 'XEOF'\nfrom calc.mass import pounds_to_kg\ndef test_pounds(): assert abs(pounds_to_kg(1)-0.4536)<0.01\nXEOF\ncat > tests/test_distance.py << 'XEOF'\nfrom calc.distance import km_to_miles\ndef test_km(): assert abs(km_to_miles(1)-0.6214)<0.01\nXEOF\ncat > tests/test_bounds.py << 'XEOF'\nfrom calc.bounds import clamp\ndef test_clamp(): assert clamp(15,0,10)==10; assert clamp(-5,0,10)==0; assert clamp(5,0,10)==5\nXEOF",
+  "verify": [
+    {
+      "id": "divide-raises",
+      "cmd": "python3 -c \"from calc.arithmetic import divide; divide(1,0)\" 2>&1 | grep -q ZeroDivisionError",
+      "weight": 1.0
+    },
+    {
+      "id": "power-zero",
+      "cmd": "python3 -c \"from calc.arithmetic import power; assert power(5,0)==1\"",
+      "weight": 1.0
+    },
+    {
+      "id": "factorial-raises",
+      "cmd": "python3 -c \"from calc.sequences import factorial; factorial(-1)\" 2>&1 | grep -q ValueError",
+      "weight": 1.0
+    },
+    {
+      "id": "fibonacci",
+      "cmd": "python3 -c \"from calc.sequences import fibonacci; assert fibonacci(10)==55\"",
+      "weight": 1.0
+    },
+    {
+      "id": "median-even",
+      "cmd": "python3 -c \"from calc.averages import median; assert median([1,2,3,4])==2.5\"",
+      "weight": 1.0
+    },
+    {
+      "id": "variance",
+      "cmd": "python3 -c \"from calc.spread import variance; assert abs(variance([2,4,4,4,5,5,7,9])-4.571)<0.01\"",
+      "weight": 1.0
+    },
+    {
+      "id": "celsius-32",
+      "cmd": "python3 -c \"from calc.temperature import celsius_to_fahrenheit; assert celsius_to_fahrenheit(0)==32\"",
+      "weight": 1.0
+    },
+    {
+      "id": "pounds",
+      "cmd": "python3 -c \"from calc.mass import pounds_to_kg; assert abs(pounds_to_kg(1)-0.4536)<0.01\"",
+      "weight": 1.0
+    },
+    {
+      "id": "km",
+      "cmd": "python3 -c \"from calc.distance import km_to_miles; assert abs(km_to_miles(1)-0.6214)<0.01\"",
+      "weight": 1.0
+    },
+    {
+      "id": "clamp",
+      "cmd": "python3 -c \"from calc.bounds import clamp; assert clamp(15,0,10)==10 and clamp(-5,0,10)==0\"",
+      "weight": 1.0
+    },
+    {
+      "id": "all-tests",
+      "cmd": "python3 -m pytest tests/ -q 2>&1 | grep -q '14 passed'",
+      "weight": 2.0
+    }
+  ],
+  "simulation": {
+    "residual_fail_prob": 0.03,
+    "base_doom_loop_prob": 0.08,
+    "drift_prob_per_feature": 0.05
+  }
+}

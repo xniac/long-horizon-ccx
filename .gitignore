@@ -38,3 +38,6 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+
+# Ad-hoc A/B run stderr logs (not deliverables)
+runs_*.log

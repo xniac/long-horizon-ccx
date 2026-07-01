@@ -1,0 +1,126 @@
+{
+  "id": "v07-debug-amnesiac-pytest",
+  "title": "v06 with restricted pytest use (E refined)",
+  "goal": "Fix all 10 subtle bugs until 15/15 tests pass.",
+  "prompt": "This codebase has 10 subtle bugs across 3 files. The test suite tests/test_calc.py is CORRECT \u2014 do NOT modify it.\n\n**CRITICAL CONSTRAINTS \u2014 read carefully:**\n1. **You have amnesia between sessions.** Only PROGRESS.md and feature_list.json survive across sessions. Trust them.\n2. **Run pytest AT MOST TWICE per session**: once at start to diagnose, once at end to verify. Extra runs waste your budget.\n3. **Fix EXACTLY ONE bug per session.** Do not fix more than one.\n4. **BEFORE stopping, you MUST:**\n   - Update PROGRESS.md with: (a) which bug ID you fixed this session, (b) what you tried that did NOT work.\n   - Update feature_list.json \u2014 flip the fixed bug to passes:true with evidence (test name).\n5. **Trust PROGRESS.md over your own diagnosis.** If PROGRESS.md says bug01 is fixed, do NOT re-verify it \u2014 pick the next unfixed one.\n\nEach session:\na. Read PROGRESS.md fully.\nb. Run pytest ONCE to see current state.\nc. Pick ONE bug (the next unfixed one per PROGRESS.md or first failing test).\nd. Fix it in calc/core.py, calc/stats.py, or calc/convert.py.\ne. (Optional) Run pytest ONCE to verify \u2014 you have used your quota.\nf. Update PROGRESS.md and feature_list.json.\ng. Stop.",
+  "difficulty": "capability",
+  "features": [
+    {
+      "id": "bug01-divide",
+      "description": "divide(1,0) should raise ZeroDivisionError",
+      "requires": [
+        "ZeroDivisionError"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug02-power",
+      "description": "power(x,0) should return 1",
+      "requires": [
+        "return 1"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug03-factorial",
+      "description": "factorial(-1) should raise ValueError",
+      "requires": [
+        "ValueError"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug04-fibonacci",
+      "description": "fibonacci off-by-one: return b not a",
+      "requires": [
+        "return b"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug05-median",
+      "description": "median even-length: average two middle",
+      "requires": [
+        "mid-1"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug06-variance",
+      "description": "sample variance: divide by n-1",
+      "requires": [
+        "n - 1",
+        "len"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug07-percentile",
+      "description": "percentile indices must be int",
+      "requires": [
+        "int("
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug08-celsius",
+      "description": "celsius: + 32 not - 32",
+      "requires": [
+        "+ 32"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug09-pounds",
+      "description": "pounds_to_kg: / 2.205 not * 2.205",
+      "requires": [
+        "/ 2.205"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "bug10-km",
+      "description": "km_to_miles: / 1.60934 not * 1.60934",
+      "requires": [
+        "/ 1.60934"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "compaction_boundaries": 0,
+  "interruption": false,
+  "reference_solution": "Fix all 10 bugs: ZeroDivisionError, power=1, ValueError, return b, avg median, n-1 variance, int indices, +32, /2.205, /1.60934",
+  "setup": "mkdir -p calc tests\necho '' > calc/__init__.py\ncat > calc/core.py << 'XEOF'\nimport math\ndef add(a, b): return a + b\ndef divide(a, b):\n    if b == 0: return 0\n    return a / b\ndef power(base, exp):\n    if exp == 0: return 0\n    return base ** exp\ndef factorial(n):\n    if n < 0: return -1\n    result = 1\n    for i in range(1, n + 1): result *= i\n    return result\ndef fibonacci(n):\n    if n <= 0: return 0\n    if n == 1: return 1\n    a, b = 0, 1\n    for _ in range(n - 1): a, b = b, a + b\n    return a\nXEOF\ncat > calc/stats.py << 'XEOF'\nimport math\ndef mean(values):\n    if not values: return 0\n    return sum(values) / len(values)\ndef median(values):\n    if not values: return 0\n    s = sorted(values); n = len(s); mid = n // 2\n    if n % 2 == 0: return s[mid]\n    return s[mid]\ndef variance(values):\n    if len(values) < 2: return 0\n    m = mean(values)\n    return sum((x - m) ** 2 for x in values) / len(values)\ndef std_dev(values): return math.sqrt(variance(values))\ndef percentile(values, p):\n    if not values: return 0\n    s = sorted(values); k = (len(s) - 1) * (p / 100)\n    f = math.floor(k); c = math.ceil(k)\n    if f == c: return s[int(k)]\n    return s[f] * (c - k) + s[c] * (k - f)\nXEOF\ncat > calc/convert.py << 'XEOF'\ndef celsius_to_fahrenheit(c): return c * 9/5 - 32\ndef pounds_to_kg(lbs): return lbs * 2.205\ndef hex_to_rgb(hex_str):\n    hex_str = hex_str.lstrip('#')\n    return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))\ndef rgb_to_hex(r, g, b): return '#{:02x}{:02x}{:02x}'.format(r, g, b)\ndef km_to_miles(km): return km * 1.60934\nXEOF\ncat > tests/test_calc.py << 'XEOF'\nimport pytest, math\nfrom calc.core import add, divide, power, factorial, fibonacci\nfrom calc.stats import mean, median, variance, std_dev, percentile\nfrom calc.convert import celsius_to_fahrenheit, pounds_to_kg, hex_to_rgb, rgb_to_hex, km_to_miles\ndef test_add(): assert add(2,3)==5\ndef test_divide():\n    assert divide(10,2)==5.0\n    with pytest.raises(ZeroDivisionError): divide(1,0)\ndef test_power(): assert power(2,3)==8; assert power(5,0)==1\ndef test_factorial():\n    assert factorial(5)==120; assert factorial(0)==1\n    with pytest.raises(ValueError): factorial(-1)\ndef test_fibonacci(): assert fibonacci(0)==0; assert fibonacci(6)==8; assert fibonacci(10)==55\ndef test_mean(): assert mean([1,2,3,4,5])==3.0\ndef test_median_odd(): assert median([1,3,5])==3\ndef test_median_even(): assert median([1,2,3,4])==2.5\ndef test_variance(): assert abs(variance([2,4,4,4,5,5,7,9])-4.571)<0.01\ndef test_std_dev(): assert abs(std_dev([2,4,4,4,5,5,7,9])-2.138)<0.01\ndef test_percentile(): assert percentile([1,2,3,4,5],50)==3\ndef test_celsius(): assert celsius_to_fahrenheit(0)==32; assert celsius_to_fahrenheit(100)==212\ndef test_pounds(): assert abs(pounds_to_kg(1)-0.4536)<0.01\ndef test_hex(): assert hex_to_rgb('FF0000_1')==(255,0,0)\ndef test_km(): assert abs(km_to_miles(1)-0.6214)<0.01\nXEOF",
+  "verify": [
+    {
+      "id": "all-15-pass",
+      "cmd": "python3 -m pytest tests/test_calc.py -q 2>&1 | grep -q '15 passed'",
+      "weight": 2.0
+    },
+    {
+      "id": "divide-raises",
+      "cmd": "python3 -c \"from calc.core import divide; divide(1,0)\" 2>&1 | grep -q ZeroDivisionError",
+      "weight": 1.0
+    },
+    {
+      "id": "power-zero",
+      "cmd": "python3 -c \"from calc.core import power; assert power(5,0)==1\"",
+      "weight": 1.0
+    },
+    {
+      "id": "celsius-32",
+      "cmd": "python3 -c \"from calc.convert import celsius_to_fahrenheit; assert celsius_to_fahrenheit(0)==32\"",
+      "weight": 1.0
+    },
+    {
+      "id": "median-even",
+      "cmd": "python3 -c \"from calc.stats import median; assert median([1,2,3,4])==2.5\"",
+      "weight": 1.0
+    }
+  ],
+  "simulation": {
+    "residual_fail_prob": 0.03,
+    "base_doom_loop_prob": 0.08,
+    "drift_prob_per_feature": 0.05
+  }
+}
