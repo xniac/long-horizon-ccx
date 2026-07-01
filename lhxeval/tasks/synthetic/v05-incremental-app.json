@@ -1,0 +1,37 @@
+{
+  "id": "v05-incremental-app",
+  "title": "10-module app built one module per session (multi-session, verified)",
+  "goal": "Build a 10-module Python app across independent sessions, one module at a time.",
+  "prompt": "You are building a 10-module Python app ONE MODULE AT A TIME across multiple sessions.\n\nRead PROGRESS.md to see which modules are ALREADY DONE. Then create the NEXT UNFINISHED module.\nCreate EXACTLY ONE module per session — do NOT create more than one. After creating it, update PROGRESS.md and stop.\n\nThe modules (in order, each imports from previous):\n1. app/constants.py — APP_NAME=\"myapp\"; VERSION=\"1.0\"; MAX_ITEMS=100\n2. app/errors.py — class AppError(Exception); class NotFoundError(AppError); class ValidationError(AppError)\n3. app/models.py — from app.constants import MAX_ITEMS; @dataclass class Item: id:int; name:str; price:float\n4. app/validators.py — from app.errors import ValidationError; from app.models import Item; def validate_item(item)->bool\n5. app/store.py — from app.models import Item; from app.errors import NotFoundError; class Store: add/get/list_all/delete\n6. app/formatter.py — from app.models import Item; def format_item(item)->str; def format_table(items)->str\n7. app/calculator.py — from app.store import Store; from app.models import Item; def total_value/average_price/most_expensive\n8. app/exporter.py — from app.store import Store; from app.formatter import format_table; def export_json/export_text\n9. app/importer.py — from app.store import Store; from app.models import Item; from app.validators import validate_item; def import_json(path,store)->int\n10. app/pipeline.py — from all above; def run(input_path,output_path)->dict\n\nIf ALL 10 modules exist, create tests/test_app.py with 1 test per module instead.\nIMPORTANT: Check PROGRESS.md FIRST. Only do ONE thing per session.",
+  "difficulty": "capability",
+  "features": [
+    {"id": "F01-constants", "description": "constants module", "requires": ["APP_NAME", "myapp"], "weight": 1.0},
+    {"id": "F02-errors", "description": "errors module", "requires": ["AppError", "NotFoundError"], "weight": 1.0},
+    {"id": "F03-models", "description": "models module", "requires": ["class Item", "dataclass"], "weight": 1.0},
+    {"id": "F04-validators", "description": "validators module", "requires": ["validate_item", "ValidationError"], "weight": 1.0},
+    {"id": "F05-store", "description": "store module", "requires": ["class Store", "add", "get"], "weight": 1.0},
+    {"id": "F06-formatter", "description": "formatter module", "requires": ["format_item", "format_table"], "weight": 1.0},
+    {"id": "F07-calculator", "description": "calculator module", "requires": ["total_value", "average_price"], "weight": 1.0},
+    {"id": "F08-exporter", "description": "exporter module", "requires": ["export_json", "export_text"], "weight": 1.0},
+    {"id": "F09-importer", "description": "importer module", "requires": ["import_json", "validate_item"], "weight": 1.0},
+    {"id": "F10-pipeline", "description": "pipeline module", "requires": ["def run", "import"], "weight": 1.0}
+  ],
+  "compaction_boundaries": 2,
+  "interruption": false,
+  "reference_solution": "10 Python modules with cross-module imports, each created in a separate session.",
+  "setup": "mkdir -p app tests; echo '' > app/__init__.py",
+  "verify": [
+    {"id": "constants", "cmd": "python3 -c \"from app.constants import APP_NAME; assert APP_NAME=='myapp'\"", "weight": 1.0},
+    {"id": "models", "cmd": "python3 -c \"from app.models import Item; assert Item(1,'x',1.0).price==1.0\"", "weight": 1.0},
+    {"id": "store", "cmd": "python3 -c \"from app.store import Store; from app.models import Item; s=Store(); s.add(Item(1,'a',1.0)); assert s.get(1).name=='a'\"", "weight": 1.0},
+    {"id": "calculator", "cmd": "python3 -c \"from app.calculator import total_value; from app.store import Store; from app.models import Item; s=Store(); s.add(Item(1,'a',5.0)); s.add(Item(2,'b',3.0)); assert total_value(s)==8.0\"", "weight": 1.5},
+    {"id": "pipeline", "cmd": "python3 -c \"from app.pipeline import run\"", "weight": 1.0},
+    {"id": "tests", "cmd": "python3 -m pytest tests/test_app.py -q", "weight": 1.0}
+  ],
+  "simulation": {
+    "residual_fail_prob": 0.03,
+    "compaction_amnesia_prob": 0.7,
+    "drift_prob_per_feature": 0.08,
+    "cold_resume_fail_prob": 0.5
+  }
+}
