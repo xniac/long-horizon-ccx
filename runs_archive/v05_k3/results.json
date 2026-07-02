@@ -1,0 +1,200 @@
+{
+  "tasks": [
+    "v05-incremental-app"
+  ],
+  "k": 3,
+  "seeds": [
+    1000,
+    1001,
+    1002
+  ],
+  "arms": {
+    "on": {
+      "arm": "on",
+      "n_trials": 3,
+      "n_success": 3,
+      "k": 3,
+      "pass_at_1": 1.0,
+      "pass_caret_k": 1.0,
+      "reliability_k": 3,
+      "pass_at_curve": {
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0
+      },
+      "pass_caret_curve": {
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0
+      },
+      "mean_steps": 84.66666666666667,
+      "mean_tokens": 29392,
+      "mean_cost_usd": 0.5989842833333334,
+      "compaction_survival": null,
+      "resume_success": null,
+      "drift_rate": 0.0,
+      "doom_loop_rate": 0
+    },
+    "off": {
+      "arm": "off",
+      "n_trials": 3,
+      "n_success": 0,
+      "k": 3,
+      "pass_at_1": 0.0,
+      "pass_caret_k": 0.0,
+      "reliability_k": 3,
+      "pass_at_curve": {
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "pass_caret_curve": {
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "mean_steps": 0,
+      "mean_tokens": 5649.666666666667,
+      "mean_cost_usd": 0.12050698333333333,
+      "compaction_survival": null,
+      "resume_success": null,
+      "drift_rate": 0.0,
+      "doom_loop_rate": 0
+    }
+  },
+  "paired_stats": {
+    "success_diff_ci": "+1.000 [+1.000, +1.000] (95% CI)",
+    "partial_credit_diff_ci": "+0.692 [+0.692, +0.692] (95% CI)",
+    "steps_diff_ci": "+84.667 [+79.000, +91.000] (95% CI)",
+    "tokens_diff_ci": "+23742.333 [+18066.000, +27595.000] (95% CI)",
+    "mcnemar": "McNemar exact: helped=3, hurt=0, discordant=3, p=0.2500"
+  },
+  "trials": [
+    {
+      "task_id": "v05-incremental-app",
+      "arm": "on",
+      "seed": 1000,
+      "trial_index": 0,
+      "success": true,
+      "partial_credit": 1.0,
+      "steps": 91,
+      "tokens": 30777,
+      "cost_usd": 0.63175475,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 6
+      },
+      "n_events": 92
+    },
+    {
+      "task_id": "v05-incremental-app",
+      "arm": "off",
+      "seed": 1000,
+      "trial_index": 0,
+      "success": false,
+      "partial_credit": 0.3076923076923077,
+      "steps": 0,
+      "tokens": 5211,
+      "cost_usd": 0.10882585,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 6
+      },
+      "n_events": 0
+    },
+    {
+      "task_id": "v05-incremental-app",
+      "arm": "on",
+      "seed": 1001,
+      "trial_index": 1,
+      "success": true,
+      "partial_credit": 1.0,
+      "steps": 79,
+      "tokens": 24472,
+      "cost_usd": 0.5627647500000001,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 6
+      },
+      "n_events": 80
+    },
+    {
+      "task_id": "v05-incremental-app",
+      "arm": "off",
+      "seed": 1001,
+      "trial_index": 1,
+      "success": false,
+      "partial_credit": 0.3076923076923077,
+      "steps": 0,
+      "tokens": 6406,
+      "cost_usd": 0.13800645,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 6
+      },
+      "n_events": 0
+    },
+    {
+      "task_id": "v05-incremental-app",
+      "arm": "on",
+      "seed": 1002,
+      "trial_index": 2,
+      "success": true,
+      "partial_credit": 1.0,
+      "steps": 84,
+      "tokens": 32927,
+      "cost_usd": 0.6024333500000002,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 6
+      },
+      "n_events": 85
+    },
+    {
+      "task_id": "v05-incremental-app",
+      "arm": "off",
+      "seed": 1002,
+      "trial_index": 2,
+      "success": false,
+      "partial_credit": 0.3076923076923077,
+      "steps": 0,
+      "tokens": 5332,
+      "cost_usd": 0.11468865,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 6
+      },
+      "n_events": 0
+    }
+  ]
+}

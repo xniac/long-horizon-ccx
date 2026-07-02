@@ -36,6 +36,16 @@ def test_from_env_never_raises_on_garbage(monkeypatch):
         Config.from_env()  # must not raise
 
 
+def test_from_env_never_raises_on_wrong_typed_json(monkeypatch):
+    _clear_lhx(monkeypatch)
+    # Well-formed JSON that pydantic rejects (wrong type / not an object) must
+    # fall back to defaults, not crash the hook.
+    for bad in ['{"step_budget": "lots"}', '{"enabled": {"nested": 1}}', '[1, 2]', '"str"']:
+        monkeypatch.setenv("LHX_CONFIG", bad)
+        cfg = Config.from_env()
+        assert cfg.step_budget == Config().step_budget
+
+
 def test_env_vars_override_base_config(monkeypatch):
     _clear_lhx(monkeypatch)
     monkeypatch.setenv("LHX_CONFIG", Config(enabled=True).model_dump_json())

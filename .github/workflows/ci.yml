@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:  # manual "Run workflow" button in the Actions tab
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Task suite sanity check (graders not vacuous)
+        run: |
+          python scripts/seed_tasks.py
+          lhx-eval validate
+      - name: Unit + integration tests
+        run: pytest -q
+      # The full offline A/B is deterministic and key-free by design, so CI can
+      # run it end-to-end (backend=simulated) as a smoke of the whole pipeline.
+      - name: Offline paired A/B smoke
+        run: lhx-eval run -k 2

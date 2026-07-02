@@ -92,8 +92,15 @@ class Config(BaseModel):
                     base = json.loads(text)
                 except (ValueError, TypeError):
                     base = {}
+        if not isinstance(base, dict):
+            base = {}
 
-        cfg = cls(**base)
+        try:
+            cfg = cls(**base)
+        except Exception:
+            # Well-formed JSON with wrong-typed/unknown fields must not crash a
+            # hook either (same silent-disable failure mode as a bad env value).
+            cfg = cls()
         cfg.enabled = _env_bool("LHX_ENABLED", cfg.enabled)
         cfg.progress_ledger = _env_bool("LHX_PROGRESS_LEDGER", cfg.progress_ledger)
         cfg.checkpointing = _env_bool("LHX_CHECKPOINTING", cfg.checkpointing)

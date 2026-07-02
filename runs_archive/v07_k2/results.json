@@ -1,0 +1,153 @@
+{
+  "tasks": [
+    "v06c-debug-amnesiac-pytest"
+  ],
+  "k": 2,
+  "seeds": [
+    1000,
+    1001
+  ],
+  "arms": {
+    "on": {
+      "arm": "on",
+      "n_trials": 2,
+      "n_success": 2,
+      "k": 2,
+      "pass_at_1": 1.0,
+      "pass_caret_k": 1.0,
+      "reliability_k": 2,
+      "pass_at_curve": {
+        "1": 1.0,
+        "2": 1.0
+      },
+      "pass_caret_curve": {
+        "1": 1.0,
+        "2": 1.0
+      },
+      "mean_steps": 44.5,
+      "mean_tokens": 15353,
+      "mean_cost_usd": 0.29440594999999997,
+      "compaction_survival": null,
+      "resume_success": null,
+      "drift_rate": 0.0,
+      "doom_loop_rate": 0
+    },
+    "off": {
+      "arm": "off",
+      "n_trials": 2,
+      "n_success": 2,
+      "k": 2,
+      "pass_at_1": 1.0,
+      "pass_caret_k": 1.0,
+      "reliability_k": 2,
+      "pass_at_curve": {
+        "1": 1.0,
+        "2": 1.0
+      },
+      "pass_caret_curve": {
+        "1": 1.0,
+        "2": 1.0
+      },
+      "mean_steps": 0,
+      "mean_tokens": 28005,
+      "mean_cost_usd": 0.5349529749999999,
+      "compaction_survival": null,
+      "resume_success": null,
+      "drift_rate": 0.0,
+      "doom_loop_rate": 0
+    }
+  },
+  "paired_stats": {
+    "success_diff_ci": "+0.000 [+0.000, +0.000] (95% CI)",
+    "partial_credit_diff_ci": "+0.000 [+0.000, +0.000] (95% CI)",
+    "steps_diff_ci": "+44.500 [+42.000, +47.000] (95% CI)",
+    "tokens_diff_ci": "-12652.000 [-14380.000, -10924.000] (95% CI)",
+    "mcnemar": "McNemar exact: helped=0, hurt=0, discordant=0, p=1.0000"
+  },
+  "trials": [
+    {
+      "task_id": "v06c-debug-amnesiac-pytest",
+      "arm": "on",
+      "seed": 1000,
+      "trial_index": 0,
+      "success": true,
+      "partial_credit": 1.0,
+      "steps": 47,
+      "tokens": 16555,
+      "cost_usd": 0.32110275,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 5
+      },
+      "n_events": 48
+    },
+    {
+      "task_id": "v06c-debug-amnesiac-pytest",
+      "arm": "off",
+      "seed": 1000,
+      "trial_index": 0,
+      "success": true,
+      "partial_credit": 1.0,
+      "steps": 0,
+      "tokens": 27479,
+      "cost_usd": 0.55421155,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 5
+      },
+      "n_events": 0
+    },
+    {
+      "task_id": "v06c-debug-amnesiac-pytest",
+      "arm": "on",
+      "seed": 1001,
+      "trial_index": 1,
+      "success": true,
+      "partial_credit": 1.0,
+      "steps": 42,
+      "tokens": 14151,
+      "cost_usd": 0.26770914999999995,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 5
+      },
+      "n_events": 43
+    },
+    {
+      "task_id": "v06c-debug-amnesiac-pytest",
+      "arm": "off",
+      "seed": 1001,
+      "trial_index": 1,
+      "success": true,
+      "partial_credit": 1.0,
+      "steps": 0,
+      "tokens": 28531,
+      "cost_usd": 0.5156944,
+      "drifted": false,
+      "doom_loops": 0,
+      "forced_compaction": false,
+      "interrupted": false,
+      "resumed_ok": false,
+      "grader_detail": {
+        "mode": "executable-checks",
+        "n_checks": 5
+      },
+      "n_events": 0
+    }
+  ]
+}

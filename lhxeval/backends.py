@@ -249,7 +249,7 @@ class ClaudeAgentSDKBackend(AgentBackend):
         # rest of Bash usable. Note: a blocklist is whack-a-mole — Haiku will
         # bypass `Bash` via the `Skill`/`Agent`/`ToolSearch` subagent path. Prefer
         # `allowed_tools` (an explicit whitelist) when the goal is to force
-        # per-file Read+Edit (see DESIGN.md §5.9, v04 audit experiment).
+        # per-file Read+Edit (see DESIGN.md §5, v04 audit row).
         self.disallowed_tools = list(disallowed_tools) if disallowed_tools else []
         # `--allowedTools` is a PERMISSION allowlist (skip the prompt for these);
         # under bypassPermissions it is a no-op for restriction. To actually shrink
@@ -404,6 +404,12 @@ class ClaudeAgentSDKBackend(AgentBackend):
         except subprocess.TimeoutExpired:
             self.last_cli = {"cmd": " ".join(cmd), "returncode": "TIMEOUT",
                              "stdout": "", "stderr": "timed out"}
+            # Not a BackendError: a hung/slow session is agent behaviour, and the
+            # workspace state is still gradeable. But leave a marker in the event
+            # trail so "agent failed" and "infra timeout" stay distinguishable
+            # (aggregate pass/fail hides exactly this — see §2.4).
+            self._record_event(ws, {"type": "session_timeout",
+                                    "timeout_seconds": self.timeout_seconds})
             return {}
 
         # Parse the JSON result envelope (carries cost + an is_error flag).
@@ -444,7 +450,10 @@ class ClaudeAgentSDKBackend(AgentBackend):
         import anyio
         from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore
 
-        for k, v in env.items():  # ensure the subprocessless SDK sees LHX_*/key
+        # The in-process SDK reads os.environ, so the trial env (LHX_*, key) must
+        # be set globally — snapshot and restore so nothing leaks across trials.
+        saved = {k: os.environ.get(k) for k in env}
+        for k, v in env.items():
             os.environ[k] = v
 
         cost = {"usd": 0.0, "tokens": 0}
@@ -483,7 +492,30 @@ class ClaudeAgentSDKBackend(AgentBackend):
                 f"Agent SDK query failed: {e}. Check ANTHROPIC_API_KEY / model "
                 "access, or use --backend simulated."
             ) from e
+        finally:
+            for k, old in saved.items():
+                if old is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = old
         return cost
+
+    @staticmethod
+    def _record_event(ws, event: dict) -> None:
+        """Append a harness-side event to the sandbox trail (same file the hooks
+        write), so it survives into ``_reconstruct_outcome``'s transcript."""
+        import json
+        from datetime import datetime, timezone
+        from pathlib import Path
+
+        path = Path(ws) / ".lh" / "events.jsonl"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"ts": stamp, **event}) + "\n")
+        except OSError:
+            pass  # diagnostics only — never fail the trial over it
 
     @staticmethod
     def _reconstruct_outcome(ws, feature_list_cls) -> RunOutcome:

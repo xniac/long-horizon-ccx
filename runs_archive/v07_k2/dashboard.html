@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Long-horizon module — A/B eval</title>
+<style>
+ body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}
+ h1{font-size:1.5rem} h2{font-size:1.1rem;margin-top:2rem;border-bottom:1px solid #eee;padding-bottom:.3rem}
+ table{border-collapse:collapse;width:100%;margin:.5rem 0;font-size:.92rem}
+ th,td{border:1px solid #e3e3e3;padding:.45rem .6rem;text-align:left}
+ th{background:#fafafa}
+ .good{color:#0a7d2c;font-weight:600} .bad{color:#c0392b;font-weight:600}
+ .meta{color:#666;font-size:.85rem}
+ code{background:#f4f4f4;padding:.1rem .3rem;border-radius:3px}
+</style></head><body>
+<h1>Long-horizon module — controlled A/B</h1>
+<p class="meta">1 tasks &times; k=2 seeds &times; 2 arms
+ = 4 trials. Backend: simulated (deterministic) unless noted.
+ Only the long-horizon module is toggled; model, tasks, harness and seeds are fixed.</p>
+
+<h2>Per-arm metrics</h2>
+<table>
+ <tr><th>metric</th><th>module ON</th><th>module OFF</th><th>&Delta; (ON&minus;OFF)</th></tr>
+ <tr><td>pass@1 (macro)</td><td>100.0%</td><td>100.0%</td><td><span class="">+0.0pp</span></td></tr>
+<tr><td>pass^2 (reliability)</td><td>100.0%</td><td>100.0%</td><td><span class="">+0.0pp</span></td></tr>
+<tr><td>compaction-survival</td><td>—</td><td>—</td><td></td></tr>
+<tr><td>resume-after-interruption</td><td>—</td><td>—</td><td></td></tr>
+<tr><td>goal-drift rate</td><td>0.0%</td><td>0.0%</td><td><span class="">+0.0pp</span></td></tr>
+<tr><td>doom-loops / trial</td><td>0</td><td>0</td><td><span class="">+0.00</span></td></tr>
+<tr><td>mean steps</td><td>44.50</td><td>0</td><td><span class="bad">+44.50</span></td></tr>
+<tr><td>mean tokens</td><td>15353</td><td>28005</td><td><span class="good">-12,652.00</span></td></tr>
+<tr><td>mean cost (USD)</td><td>0.29</td><td>0.53</td><td><span class="good">-0.24</span></td></tr>
+</table>
+<p class="meta">Green = ON is better; red = ON is worse. pp = percentage points.</p>
+
+<h2>Paired statistics</h2>
+<table>
+ <tr><th>statistic</th><th>value</th></tr>
+ <tr><td>success diff ci</td><td>+0.000 [+0.000, +0.000] (95% CI)</td></tr>
+<tr><td>partial credit diff ci</td><td>+0.000 [+0.000, +0.000] (95% CI)</td></tr>
+<tr><td>steps diff ci</td><td>+44.500 [+42.000, +47.000] (95% CI)</td></tr>
+<tr><td>tokens diff ci</td><td>-12652.000 [-14380.000, -10924.000] (95% CI)</td></tr>
+<tr><td>mcnemar</td><td>McNemar exact: helped=0, hurt=0, discordant=0, p=1.0000</td></tr>
+</table>
+<p class="meta">CIs are paired bootstrap (resampling (task,seed) pairs). McNemar
+ is the exact paired test on per-trial pass/fail; "helped" = ON passed where OFF
+ failed, "hurt" = the reverse.</p>
+
+<h2>pass@k vs pass^k curves (macro-averaged over tasks)</h2>
+<table>
+ <tr><th>k</th><th>pass@k ON</th><th>pass@k OFF</th><th>pass^k ON</th><th>pass^k OFF</th></tr>
+ <tr><td>1</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td></tr>
+<tr><td>2</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td></tr>
+</table>
+<p class="meta">pass@k (at least one of k succeeds) rises with k and is
+ "exponentially forgiving"; pass^k (all k succeed) falls with k and is the honest
+ reliability number. The ON/OFF gap on pass^k is the long-horizon payoff.</p>
+
+<h2>How to read this</h2>
+<p>The module is designed to win on the <b>long-horizon-specific</b> metrics —
+ compaction-survival, resume-after-interruption, goal-drift and doom-loops — and
+ those gains should show up as higher reliability (pass^k) more than raw pass@1.
+ A near-zero delta on pass@1 with large deltas on the long-horizon metrics is the
+ expected signature, not a null result.</p>
+</body></html>

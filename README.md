@@ -50,6 +50,10 @@ case honestly:
 The contribution is the eval that tells these apart — where the module helps, where
 it's overhead, where the agent routes around it — not a single flashy number.
 
+The raw evidence for these runs (per-trial `results.json` + dashboards) is
+committed in [`runs_archive/`](runs_archive/), so the numbers are inspectable
+without re-spending on API calls.
+
 ## Quickstart
 
 ```bash
@@ -58,7 +62,7 @@ pip install -e .
 python scripts/seed_tasks.py     # generate + validate the synthetic task suite
 lhx-eval validate                # reference-solution sanity check (graders not vacuous)
 lhx-eval run -k 10               # the paired A/B → runs/latest/{results.json,dashboard.html}
-pytest -q                        # 53 unit + integration tests
+pytest -q                        # 54 unit + integration tests
 
 # one-shot:
 scripts/run_eval.sh 10           # validate + run + point you at the dashboard
@@ -80,7 +84,8 @@ pip install -e ".[sdk]"        # only if you want the Python Agent SDK transport
 python scripts/smoke_sdk.py v01-slugify-verified         # runs the produced code
 python scripts/smoke_sdk.py v02-health-endpoint-verified # starts the server & probes it
 
-# Reproduce the documented deltas. Each task carries its own multi-session settings
+# Reproduce the documented deltas (original runs archived in runs_archive/).
+# Each task carries its own multi-session settings
 # (schema.RunConfig), so `--task-id` alone is enough — no env knobs to remember:
 lhx-eval run --backend sdk --task-id v05-incremental-app -k 3        # ON 3/3 vs OFF 0/3
 lhx-eval run --backend sdk --task-id v06-debug-session-scoped -k 3   # ON 3/3 vs OFF 0/3
@@ -146,9 +151,10 @@ lhxeval/                 # the evaluation harness (the centerpiece)
   runner.py              #   the paired A/B driver (records the backend)
   report.py              #   results.json + self-contained HTML dashboard (labels the backend)
   cli.py                 #   `lhx-eval run|validate`
-  tasks/                 #   task schema (incl. per-task RunConfig) + suite (t/r01–03, v01–07)
+  tasks/                 #   task schema (incl. per-task RunConfig) + suite (t01–06, r01–03, v01–07)
 scripts/                 # seed_tasks.py, install.sh, run_eval.sh, smoke_sdk.py
-tests/                   # 53 tests: math, guards, state, hooks, backend seam, report, end-to-end
+tests/                   # 54 tests: math, guards, state, hooks, backend seam, report, end-to-end
+runs_archive/            # committed raw results for the documented real A/B runs (v05/v06/v07)
 ```
 
 ## What's real vs needs credentials
