@@ -62,8 +62,18 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         return 1
     backend = get_backend(args.backend)
+    # Show the resolved transport too: `backend.name` is "claude-sdk" whether the
+    # underlying transport is `claude -p` (cli) or the Python SDK, which is easy to
+    # misread as "always the SDK".
+    label = backend.name
+    resolver = getattr(backend, "_resolve_transport", None)
+    if resolver is not None:
+        try:
+            label += f", transport={resolver()}"
+        except Exception:
+            pass  # no transport available yet; backend.run surfaces it properly
     print(f"Running A/B: {len(tasks)} tasks x k={args.k} x 2 arms "
-          f"= {len(tasks) * args.k * 2} trials (backend={backend.name})")
+          f"= {len(tasks) * args.k * 2} trials (backend={label})")
 
     def _progress(done, total, task_id, arm):
         bar_w = 24

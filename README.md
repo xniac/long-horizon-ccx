@@ -15,7 +15,7 @@ with honest uncertainty.
 > rationale, the four-layer decoupling (Agent / Harness / Task / Eval), prior-art
 > mapping, and methodology are in **[DESIGN.md](DESIGN.md)**.
 
-## Two layers of result (don't conflate them)
+## Two layers of result: instrument calibration vs. real capability
 
 **1. Harness-validation — instrument calibration, *not* a capability claim and *not*
 an industry-standard eval** (nobody simulates the agent to measure it). On a
@@ -33,9 +33,9 @@ Paired Δ +0.406 [+0.331, +0.481]; McNemar helped=66, hurt=1, p≈9e-19. The eff
 is *by construction* — it proves the ruler + pipeline are correct (stats, sandbox,
 aggregation), not that the module helps real Claude.
 
-**2. Real evaluation (the honest one).** On real Claude (Haiku 4.5) graded by
-**executable checks**, the effect is scenario-dependent and the eval reports each
-case honestly:
+**2. Real evaluation — the capability evidence.** On real Claude (Haiku 4.5)
+graded by **executable checks**, the effect is scenario-dependent, and the eval
+reports each case as measured:
 
 - **single-session tasks** (v01–v03): ON ≈ OFF success; ON just pays ~30–50% more
   tokens in protocol overhead.
@@ -57,7 +57,7 @@ without re-spending on API calls.
 ## Quickstart
 
 ```bash
-pip install -e .
+pip install -e ".[dev]"          # dev extra carries pytest
 
 python scripts/seed_tasks.py     # generate + validate the synthetic task suite
 lhx-eval validate                # reference-solution sanity check (graders not vacuous)
