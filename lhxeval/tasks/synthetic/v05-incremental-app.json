@@ -28,6 +28,7 @@
     {"id": "pipeline", "cmd": "python3 -c \"from app.pipeline import run\"", "weight": 1.0},
     {"id": "tests", "cmd": "python3 -m pytest tests/test_app.py -q", "weight": 1.0}
   ],
+  "run": {"max_turns": 80, "max_sessions": 3},
   "simulation": {
     "residual_fail_prob": 0.03,
     "compaction_amnesia_prob": 0.7,

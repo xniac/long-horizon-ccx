@@ -50,6 +50,20 @@ class SimulationParams(BaseModel):
     residual_fail_prob: float = 0.0
 
 
+class RunConfig(BaseModel):
+    """Recommended real-backend (SDK/CLI) settings to reproduce this task's
+    documented result. ``lhx-eval --backend sdk`` applies these *per task* unless
+    the user overrides via ``LHX_SDK_MAX_TURNS`` / ``LHX_SDK_MAX_SESSIONS``.
+
+    This is why v05's ON win is reproducible without remembering knobs: the
+    setting travels with the task (multi-session is the whole point — a single
+    session can't show it). Ignored by the simulated backend. See DESIGN §7.
+    """
+
+    max_turns: int | None = None
+    max_sessions: int | None = None
+
+
 class VerifyCheck(BaseModel):
     """An executable, outcome-based grader (F2P/P2P style). The ``cmd`` is run in
     the produced workspace after a real run; exit code 0 == passed. This grades
@@ -78,6 +92,9 @@ class Task(BaseModel):
     # Used to seed a large repo that forces real context pressure. Real backend only.
     setup: str = ""
     simulation: SimulationParams = Field(default_factory=SimulationParams)
+    # Recommended real-backend run settings (see RunConfig). Auto-applied per task
+    # by the SDK/CLI backend so documented deltas reproduce without env knobs.
+    run: RunConfig = Field(default_factory=RunConfig)
     # Executable verification for REAL runs (the SDK/CLI backend). When present
     # and run against a real workspace, these — not the agent's self-report —
     # decide success. The simulated backend ignores them (it uses ``features``).

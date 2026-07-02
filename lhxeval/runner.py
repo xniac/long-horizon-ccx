@@ -82,12 +82,14 @@ class ABResult:
     steps_ci: CI | None = None
     tokens_ci: CI | None = None
     mcnemar: McNemarResult | None = None
+    backend: str = "simulated"
 
     def to_dict(self) -> dict:
         return {
             "tasks": self.tasks,
             "k": self.k,
             "seeds": self.seeds,
+            "backend": self.backend,
             "arms": {"on": self.on.as_row(), "off": self.off.as_row()},
             "paired_stats": {
                 "success_diff_ci": str(self.success_ci) if self.success_ci else None,
@@ -112,6 +114,7 @@ def run_ab(
     """``progress(done, total, task_id, arm)`` is called before each trial (for a
     live progress line — useful since real-backend trials take minutes)."""
     backend = backend or SimulatedBackend()
+    backend_name = backend.name
     seeds = [base_seed + i for i in range(k)]
     total = len(tasks) * len(seeds) * 2
     done = 0
@@ -150,6 +153,7 @@ def run_ab(
         tasks=[t.id for t in tasks],
         k=k,
         seeds=seeds,
+        backend=backend_name,
         on=summarize_arm("on", on_trials),
         off=summarize_arm("off", off_trials),
         trials=trials,

@@ -13,7 +13,7 @@
 </style></head><body>
 <h1>Long-horizon module — controlled A/B</h1>
 <p class="meta">$n_tasks tasks &times; k=$k seeds &times; 2 arms
- = $n_trials trials. Backend: simulated (deterministic) unless noted.
+ = $n_trials trials. Backend: <b>$backend_note</b>.
  Only the long-horizon module is toggled; model, tasks, harness and seeds are fixed.</p>
 
 <h2>Per-arm metrics</h2>
@@ -42,9 +42,11 @@
  reliability number. The ON/OFF gap on pass^k is the long-horizon payoff.</p>
 
 <h2>How to read this</h2>
-<p>The module is designed to win on the <b>long-horizon-specific</b> metrics —
- compaction-survival, resume-after-interruption, goal-drift and doom-loops — and
- those gains should show up as higher reliability (pass^k) more than raw pass@1.
- A near-zero delta on pass@1 with large deltas on the long-horizon metrics is the
- expected signature, not a null result.</p>
+<p>The module can win two ways. <b>(1)</b> On the <b>long-horizon-specific</b> metrics
+ (compaction-survival, resume-after-interruption, goal-drift, doom-loops), visible as
+ higher reliability (pass^k) more than raw pass@1 — this is the signature in the
+ simulated calibration. <b>(2)</b> On task <b>completion</b> itself, when a genuinely
+ multi-session task has a subjective done-signal (the real v05/v06 A/Bs): here the gain
+ shows as a large pass@1 gap while the long-horizon rows read &ldquo;&mdash;&rdquo; because
+ those events never trigger. Neither pattern is a null result.</p>
 </body></html>

@@ -192,6 +192,12 @@ class SimulatedBackend(AgentBackend):
         return out
 
 
+class BackendError(RuntimeError):
+    """A trial could not actually run (bad API key, model access, transport
+    failure). Raised so the A/B aborts loudly instead of scoring the empty
+    workspace as a legitimate 0% pass — see DESIGN §2.4 ("measuring nothing")."""
+
+
 class ClaudeAgentSDKBackend(AgentBackend):
     """Runs real Claude in an isolated sandbox, via either the Python Agent SDK
     (``claude_agent_sdk.query()``) or the headless ``claude -p`` CLI.
@@ -214,12 +220,12 @@ class ClaudeAgentSDKBackend(AgentBackend):
     def __init__(
         self,
         model: str = "claude-haiku-4-5-20251001",
-        max_turns: int = 80,
+        max_turns: int | None = None,
         timeout_seconds: int = 900,
         transport: str = "auto",
         permission_mode: str = "bypassPermissions",
         keep_sandbox: bool = False,
-        max_sessions: int = 1,
+        max_sessions: int | None = None,
         disallowed_tools: list[str] | None = None,
         allowed_tools: list[str] | None = None,
         tools: list[str] | None = None,
@@ -304,18 +310,25 @@ class ClaudeAgentSDKBackend(AgentBackend):
 
             run_one = self._run_cli if transport == "cli" else self._run_sdk
 
+            # Effective settings: explicit env/CLI override > per-task RunConfig
+            # (reproduces the documented delta) > fallback default. This is why
+            # `--task-id v05` alone reproduces the win — the multi-session setting
+            # travels with the task (see schema.RunConfig / DESIGN §7).
+            eff_turns = self.max_turns if self.max_turns is not None else (task.run.max_turns or 80)
+            eff_sessions = self.max_sessions if self.max_sessions is not None else (task.run.max_sessions or 1)
+
             total_cost = {"usd": 0.0, "tokens": 0}
             sessions = 0
             checks: dict[str, bool] = {}
-            for _ in range(max(1, self.max_sessions)):
+            for _ in range(max(1, eff_sessions)):
                 sessions += 1
-                c = run_one(ws, env, task.prompt)   # FRESH session (no --continue)
+                c = run_one(ws, env, task.prompt, eff_turns)  # FRESH session (no --continue)
                 total_cost["usd"] += c.get("usd", 0.0) or 0.0
                 total_cost["tokens"] += c.get("tokens", 0) or 0
                 if os.environ.get("LHX_SDK_DEBUG"):
                     import sys as _sys
                     _sys.stderr.write(
-                        f"  [lhx-sdk] session {sessions}/{self.max_sessions} "
+                        f"  [lhx-sdk] session {sessions}/{eff_sessions} turns={eff_turns} "
                         f"cost=${c.get('usd', 0.0):.4f} tokens={c.get('tokens', 0)} "
                         f"terminal={(self.last_cli or {}).get('returncode')}\n"
                     )
@@ -355,7 +368,7 @@ class ClaudeAgentSDKBackend(AgentBackend):
                 results[c.id] = False
         return results
 
-    def _run_cli(self, ws, env, prompt: str) -> dict:
+    def _run_cli(self, ws, env, prompt: str, max_turns: int) -> dict:
         import shutil as _shutil
         import subprocess
 
@@ -363,7 +376,7 @@ class ClaudeAgentSDKBackend(AgentBackend):
             raise RuntimeError("transport=cli but `claude` CLI is not on PATH.")
         import json
 
-        cmd = ["claude", "-p", "--model", self.model, "--max-turns", str(self.max_turns)]
+        cmd = ["claude", "-p", "--model", self.model, "--max-turns", str(max_turns)]
         # CRITICAL: as of Claude Code 2.x, project settings (our hooks) are NOT
         # loaded unless opted in — without this the module is inert and the A/B
         # measures nothing. (See SDK path: setting_sources=["project"].)
@@ -393,22 +406,38 @@ class ClaudeAgentSDKBackend(AgentBackend):
                              "stdout": "", "stderr": "timed out"}
             return {}
 
-        # Parse cost/usage from the JSON result envelope.
-        cost: dict = {}
+        # Parse the JSON result envelope (carries cost + an is_error flag).
         try:
             data = json.loads(self.last_cli["stdout"])
-            if isinstance(data, dict):
-                cost["usd"] = data.get("total_cost_usd") or 0.0
-                usage = data.get("usage") or {}
-                cost["tokens"] = (usage.get("input_tokens", 0) or 0) + (
-                    usage.get("output_tokens", 0) or 0
-                )
-                self.last_cli["result_text"] = data.get("result", "")
         except (ValueError, TypeError):
-            pass  # non-JSON (e.g. error/timeout); cost stays empty
+            data = None
+
+        # Fail loudly on infra/auth errors. Otherwise a bad key or model-access
+        # error yields an empty workspace that grades as a legitimate 0% pass, and
+        # the whole A/B silently "measures nothing" with a clean-looking Δ=0.
+        is_error = bool(isinstance(data, dict) and data.get("is_error"))
+        if proc.returncode != 0 or is_error:
+            detail = (proc.stderr or "").strip()
+            if not detail and isinstance(data, dict):
+                detail = str(data.get("result") or data.get("subtype") or "")
+            raise BackendError(
+                f"claude CLI failed (returncode={proc.returncode}"
+                f"{', is_error=true' if is_error else ''}): "
+                f"{detail[:400] or '(no detail on stderr/stdout)'}. "
+                "Check ANTHROPIC_API_KEY / model access, or use --backend simulated."
+            )
+
+        cost: dict = {}
+        if isinstance(data, dict):
+            cost["usd"] = data.get("total_cost_usd") or 0.0
+            usage = data.get("usage") or {}
+            cost["tokens"] = (usage.get("input_tokens", 0) or 0) + (
+                usage.get("output_tokens", 0) or 0
+            )
+            self.last_cli["result_text"] = data.get("result", "")
         return cost
 
-    def _run_sdk(self, ws, env, prompt: str) -> dict:
+    def _run_sdk(self, ws, env, prompt: str, max_turns: int) -> dict:
         """Drive the in-process Agent SDK. Captures cost/usage from ResultMessage."""
         import os
 
@@ -425,7 +454,7 @@ class ClaudeAgentSDKBackend(AgentBackend):
             # CLAUDE.md); if your SDK version lacks a kwarg, drop to the minimal form.
             opts: dict = dict(
                 cwd=str(ws), permission_mode="bypassPermissions",
-                max_turns=self.max_turns, setting_sources=["project"],
+                max_turns=max_turns, setting_sources=["project"],
             )
             if self.disallowed_tools:
                 opts["disallowed_tools"] = list(self.disallowed_tools)
@@ -447,7 +476,13 @@ class ClaudeAgentSDKBackend(AgentBackend):
                 if isinstance(usage, dict):
                     cost["tokens"] = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
 
-        anyio.run(_go)
+        try:
+            anyio.run(_go)
+        except Exception as e:  # auth / model-access / transport failure
+            raise BackendError(
+                f"Agent SDK query failed: {e}. Check ANTHROPIC_API_KEY / model "
+                "access, or use --backend simulated."
+            ) from e
         return cost
 
     @staticmethod
@@ -490,9 +525,13 @@ def get_backend(name: str, **kwargs) -> AgentBackend:
         import os
 
         kwargs.setdefault("model", os.environ.get("LHX_SDK_MODEL", "claude-haiku-4-5-20251001"))
-        kwargs.setdefault("max_turns", int(os.environ.get("LHX_SDK_MAX_TURNS", "80")))
+        # None when the env var is unset → the per-task RunConfig decides (env is
+        # an explicit *override*, not a silent default that masks task settings).
+        kwargs.setdefault("max_turns",
+                          int(os.environ["LHX_SDK_MAX_TURNS"]) if "LHX_SDK_MAX_TURNS" in os.environ else None)
         kwargs.setdefault("timeout_seconds", int(os.environ.get("LHX_SDK_TIMEOUT", "900")))
-        kwargs.setdefault("max_sessions", int(os.environ.get("LHX_SDK_MAX_SESSIONS", "1")))
+        kwargs.setdefault("max_sessions",
+                          int(os.environ["LHX_SDK_MAX_SESSIONS"]) if "LHX_SDK_MAX_SESSIONS" in os.environ else None)
         # Comma-separated; spaces inside a pattern are fine ("Bash(sed *)").
         raw = os.environ.get("LHX_SDK_DISALLOWED_TOOLS", "").strip()
         if raw and "disallowed_tools" not in kwargs:

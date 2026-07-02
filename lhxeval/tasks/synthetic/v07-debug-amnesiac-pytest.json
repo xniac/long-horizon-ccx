@@ -118,6 +118,7 @@
       "weight": 1.0
     }
   ],
+  "run": {"max_turns": 80, "max_sessions": 12},
   "simulation": {
     "residual_fail_prob": 0.03,
     "base_doom_loop_prob": 0.08,

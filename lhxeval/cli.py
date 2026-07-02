@@ -10,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .backends import get_backend
+from .backends import BackendError, get_backend
 from .graders import grade_outcome, reference_solution_outcome
 from .runner import run_ab
 from .report import write_dashboard, write_results_json
@@ -74,8 +74,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         if done == total:
             print(file=sys.stderr)
 
-    result = run_ab(tasks, backend=backend, k=args.k, base_seed=args.seed,
-                    progress=_progress)
+    try:
+        result = run_ab(tasks, backend=backend, k=args.k, base_seed=args.seed,
+                        progress=_progress)
+    except BackendError as e:
+        print(f"\nERROR: {e}", file=sys.stderr)
+        print("No results written — a backend failure is not a task failure, so "
+              "it must not be scored as 0% pass.", file=sys.stderr)
+        return 1
 
     out_dir = Path(args.out)
     write_results_json(result, out_dir / "results.json")

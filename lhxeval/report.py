@@ -72,22 +72,60 @@ def _curve_rows(on: ArmMetrics, off: ArmMetrics) -> str:
 _TEMPLATE_PATH = Path(__file__).parent / "dashboard.html"
 
 
-def render_html(result: ABResult) -> str:
-    on, off = result.on, result.off
-    ps = result.to_dict()["paired_stats"]
+def _backend_note(backend: str) -> str:
+    """Honest one-line backend label for the dashboard meta line."""
+    b = (backend or "simulated").lower()
+    if "sim" in b:
+        return "simulated (deterministic)"
+    return f"real Claude ({backend})"
+
+
+def _arm_from_row(row: dict) -> ArmMetrics:
+    """Rebuild ArmMetrics from a results.json arm row (JSON stringifies the curve
+    keys, so restore them to int)."""
+    r = dict(row)
+    for key in ("pass_at_curve", "pass_caret_curve"):
+        r[key] = {int(kk): vv for kk, vv in r[key].items()}
+    return ArmMetrics(**r)
+
+
+def _render(on: ArmMetrics, off: ArmMetrics, paired_stats: dict,
+            n_tasks: int, k: int, n_trials: int, backend_note: str) -> str:
     stat_rows = "\n".join(
-        f"<tr><td>{k.replace('_', ' ')}</td><td>{v or '—'}</td></tr>"
-        for k, v in ps.items()
+        f"<tr><td>{sk.replace('_', ' ')}</td><td>{sv or '—'}</td></tr>"
+        for sk, sv in paired_stats.items()
     )
     template = Template(_TEMPLATE_PATH.read_text(encoding="utf-8"))
     return template.substitute(
-        n_tasks=len(result.tasks),
-        k=result.k,
-        n_trials=len(result.trials),
+        n_tasks=n_tasks,
+        k=k,
+        n_trials=n_trials,
+        backend_note=backend_note,
         metric_rows=_metric_rows(on, off),
         stat_rows=stat_rows,
         curve_rows=_curve_rows(on, off),
     )
+
+
+def render_html(result: ABResult) -> str:
+    return _render(
+        result.on, result.off, result.to_dict()["paired_stats"],
+        len(result.tasks), result.k, len(result.trials),
+        _backend_note(getattr(result, "backend", "simulated")),
+    )
+
+
+def render_from_results_json(path: Path, backend_note: str | None = None) -> str:
+    """Re-render a dashboard from a saved results.json — no re-run needed.
+
+    ``backend_note`` overrides the meta label (used for runs whose json predates
+    the ``backend`` field, e.g. an old real-Claude run mislabeled as simulated).
+    """
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    on, off = _arm_from_row(d["arms"]["on"]), _arm_from_row(d["arms"]["off"])
+    note = backend_note or _backend_note(d.get("backend", "simulated"))
+    return _render(on, off, d["paired_stats"],
+                   len(d["tasks"]), d["k"], len(d["trials"]), note)
 
 
 def write_dashboard(result: ABResult, path: Path) -> None:
